@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#2563eb">
+<title>Magazyn – wydawanie</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#1b1f24;--mut:#6b7280;--ok:#15803d;--okbg:#dcfce7;--err:#b91c1c;--errbg:#fee2e2;--acc:#2563eb;--line:#e5e7eb}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  .wrap{max-width:520px;margin:0 auto;padding:12px}
+  h1{font-size:18px;margin:4px 0 10px;display:flex;justify-content:space-between;align-items:center}
+  .dot{font-size:12px;font-weight:500;color:var(--mut)}
+  .steps{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .st{background:var(--card);border:2px solid var(--line);border-radius:12px;padding:8px 12px;min-height:64px}
+  .st .l{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+  .st .v{font-size:19px;font-weight:700;margin-top:3px;word-break:break-all}
+  .st.next{border-color:var(--acc);box-shadow:0 0 0 3px #2563eb22}
+  .st.done{border-color:#86efac}
+  .msg{margin:10px 0;padding:12px;border-radius:10px;font-weight:600;background:#eef2ff}
+  .msg.ok{background:var(--okbg);color:var(--ok)} .msg.err{background:var(--errbg);color:var(--err)}
+  #reader{width:100%;border-radius:14px;overflow:hidden;background:#000;min-height:0}
+  #reader video{border-radius:14px}
+  .big{display:block;width:100%;padding:16px;border:0;border-radius:14px;background:var(--acc);color:#fff;font-size:19px;font-weight:700;cursor:pointer;margin-top:8px}
+  .big.stop{background:#475569}
+  .row{display:flex;gap:8px;margin-top:10px}
+  .row input{flex:1;padding:12px;font-size:16px;border:1px solid var(--line);border-radius:10px}
+  .row button,.sm{padding:12px 14px;border:1px solid var(--line);background:#fff;border-radius:10px;font-size:15px;cursor:pointer}
+  .hint{font-size:13px;color:var(--mut);margin-top:6px}
+  h2{font-size:15px;margin:20px 0 8px}
+  table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;font-size:14px}
+  td,th{padding:8px;border-bottom:1px solid var(--line);text-align:left}
+  th{font-size:12px;color:var(--mut);font-weight:600}
+  .flash{animation:fl .35s}
+  @keyframes fl{0%{background:#bbf7d0}100%{background:var(--card)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Magazyn – wydawanie <span class="dot" id="net">…</span></h1>
+
+  <div class="steps">
+    <div class="st" id="s-co"><div class="l">1. Co</div><div class="v" id="v-co">—</div></div>
+    <div class="st" id="s-jedn"><div class="l">2. Opak./sztuki</div><div class="v" id="v-jedn">—</div></div>
+    <div class="st" id="s-ile"><div class="l">3. Ile</div><div class="v" id="v-ile">—</div></div>
+    <div class="st" id="s-kto"><div class="l">4. Kto</div><div class="v" id="v-kto">—</div></div>
+  </div>
+
+  <div class="msg" id="msg">Włącz aparat i zeskanuj kod kreskowy towaru.</div>
+
+  <div id="reader"></div>
+  <button class="big" id="camBtn">📷 Włącz aparat</button>
+
+  <div class="row">
+    <input id="kb" placeholder="Skaner / wpisz kod i Enter" autocomplete="off" enterkeyhint="send">
+    <button id="kbGo">OK</button>
+  </div>
+  <div class="hint">Skaner Bluetooth/USB lub terminal: kliknij w pole i skanuj.</div>
+
+  <h2>Ostatnie wydania</h2>
+  <table><thead><tr><th>Kiedy</th><th>Co</th><th>Ile</th><th>Kto</th></tr></thead><tbody id="log"><tr><td colspan="4">Ładowanie…</td></tr></tbody></table>
+  <div class="hint" id="store"></div>
+</div>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="config.js"></script>
+<script>
+const API = (window.VM_API || "").trim();          // adres Google Apps Script (config.js)
+const $ = id => document.getElementById(id);
+const empty = () => ({co:"", jedn:"", ile:"", kto:""});
+let st = empty(), undo = [], rows = [], NAMES = {};
+
+const LS = {
+  get(k, d){ try{ return JSON.parse(localStorage.getItem(k)) ?? d; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+NAMES = LS.get("vm_names", {});
+const nm = c => NAMES[c] || c;
+
+function say(t, kind){ const m=$("msg"); m.textContent=t; m.className="msg"+(kind?" "+kind:""); }
+function buzz(ok){ try{ navigator.vibrate && navigator.vibrate(ok?60:[90,60,90]); }catch(e){} }
+let actx;
+function beep(ok){
+  try{
+    actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+    const o=actx.createOscillator(), g=actx.createGain();
+    o.frequency.value = ok ? 1200 : 300; g.gain.value=.08; o.connect(g); g.connect(actx.destination);
+    o.start(); o.stop(actx.currentTime + (ok?.09:.3));
+  }catch(e){}
+}
+function feedback(ok){ buzz(ok); beep(ok); }
+
+function nextStep(){ if(!st.co) return "co"; if(!st.jedn) return "jedn"; if(!st.ile) return "ile"; if(!st.kto) return "kto"; return "ok"; }
+const PROMPT = {co:"Zeskanuj kod kreskowy towaru.", jedn:"Zeskanuj OPAKOWANIE albo SZTUKI.", ile:"Zeskanuj ilość (cyfry po kolei).", kto:"Zeskanuj swój kod (kto bierze).", ok:"Sprawdź i zeskanuj POTWIERDŹ."};
+
+function render(changed){
+  $("v-co").textContent = st.co ? nm(st.co) : "—";
+  $("v-jedn").textContent = st.jedn || "—";
+  $("v-ile").textContent = st.ile || "—";
+  $("v-kto").textContent = st.kto || "—";
+  const n = nextStep();
+  for(const k of ["co","jedn","ile","kto"]){
+    const el=$("s-"+k); el.classList.toggle("next", k===n); el.classList.toggle("done", !!st[k]);
+    if(k===changed){ el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); }
+  }
+}
+
+function describe(c){
+  if(c==="VM:OPAK") return "opakowanie"; if(c==="VM:SZT") return "sztuki";
+  if(/^VM:\d$/.test(c)) return "cyfra "+c.slice(3);
+  if(c.startsWith("VM:KTO:")) return c.slice(7); return nm(c);
+}
+
+function handle(raw){
+  const code = String(raw||"").trim();
+  if(!code) return;
+  if(code === "VM:POPRAW"){
+    if(!undo.length){ say("Nie ma czego cofać.", "err"); feedback(false); return; }
+    st = undo.pop(); render(); say("Cofnięto ostatnie skanowanie. "+PROMPT[nextStep()], "ok"); feedback(true); return;
+  }
+  if(code === "VM:OK"){
+    const n = nextStep();
+    if(n !== "ok"){ say("Brakuje danych. "+PROMPT[n], "err"); feedback(false); return; }
+    const ile = parseInt(st.ile,10);
+    if(!ile){ say("Ilość nie może być 0. Zeskanuj POPRAW i ilość jeszcze raz.", "err"); feedback(false); return; }
+    save({co:st.co, nazwa:nm(st.co), jednostka:st.jedn, ile, kto:st.kto}); return;
+  }
+  const prev = {...st}; let changed;
+  if(code === "VM:OPAK"){ st.jedn = "opakowanie"; changed="jedn"; }
+  else if(code === "VM:SZT"){ st.jedn = "sztuki"; changed="jedn"; }
+  else if(/^VM:\d$/.test(code)){
+    if(!st.co){ say("Najpierw zeskanuj towar.", "err"); feedback(false); return; }
+    if(st.ile.length >= 5){ say("Za duża liczba. Użyj POPRAW.", "err"); feedback(false); return; }
+    st.ile = (st.ile + code.slice(3)).replace(/^0+(?=\d)/,""); changed="ile";
+  }
+  else if(code.startsWith("VM:KTO:")){ st.kto = code.slice(7).trim(); changed="kto"; }
+  else if(code.startsWith("VM:")){ say("Nieznany kod: "+code, "err"); feedback(false); return; }
+  else { st.co = code; changed="co"; }
+  undo.push(prev); if(undo.length>30) undo.shift();
+  render(changed); say("✓ "+describe(code)+" — "+PROMPT[nextStep()], "ok"); feedback(true);
+}
+
+// ---------- zapis: kolejka lokalna + wysyłka do arkusza ----------
+let queue = LS.get("vm_queue", []);
+function save(r){
+  const now = new Date();
+  r.id = now.getTime().toString(36) + Math.random().toString(36).slice(2,7);
+  r.t = now.getTime(); r.czas = now.toLocaleString("pl-PL");
+  rows.unshift(r); rows = rows.slice(0,50); LS.set("vm_rows", rows); drawLog();
+  queue.push(r); LS.set("vm_queue", queue);
+  st = empty(); undo = []; render();
+  say(`Zapisano: ${r.nazwa} – ${r.ile} ${r.jednostka} – ${r.kto}. Następny towar.`, "ok"); feedback(true);
+  flush();
+}
+let flushing = false;
+async function flush(){
+  if(!API || flushing || !queue.length) { status(); return; }
+  flushing = true;
+  try{
+    while(queue.length){
+      const r = queue[0];
+      const res = await fetch(API, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(r)});
+      if(!res.ok) throw new Error(res.status);
+      queue.shift(); LS.set("vm_queue", queue);
+    }
+  }catch(e){ /* spróbujemy później */ }
+  flushing = false; status();
+}
+function status(){
+  const n=$("net");
+  if(!API){ n.textContent="tryb testowy"; $("store").textContent="Arkusz nie jest jeszcze podłączony – wpisy zapisują się tylko na tym telefonie."; return; }
+  n.textContent = queue.length ? `⏳ ${queue.length} do wysłania` : "✓ wysłane";
+  $("store").textContent = queue.length ? "Brak połączenia – wpisy wyślą się same, gdy wróci internet." : "Wpisy trafiają do Arkusza Google.";
+}
+async function pull(){
+  if(!API) return;
+  try{
+    const res = await fetch(API + "?list=1");
+    const j = await res.json();
+    if(j.towary){ NAMES = j.towary; LS.set("vm_names", NAMES); render(); }
+    if(Array.isArray(j.wpisy)){
+      const pending = queue.map(q=>q.id);
+      rows = queue.slice().reverse().concat(j.wpisy.filter(w=>!pending.includes(w.id)));
+      LS.set("vm_rows", rows); drawLog();
+    }
+  }catch(e){}
+}
+setInterval(()=>{ flush(); pull(); }, 30000);
+window.addEventListener("online", ()=>{ flush(); pull(); });
+
+function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function drawLog(){
+  const tb=$("log");
+  if(!rows.length){ tb.innerHTML='<tr><td colspan="4">Brak wpisów.</td></tr>'; return; }
+  tb.innerHTML = rows.slice(0,20).map(r=>`<tr><td>${esc(String(r.czas||"").replace(/:\d\d$/,""))}</td><td>${esc(r.nazwa||r.co)}</td><td>${esc(r.ile)} ${r.jednostka==="opakowanie"?"op.":"szt."}</td><td>${esc(r.kto)}</td></tr>`).join("");
+}
+
+// ---------- klawiatura / skaner sprzętowy ----------
+$("kb").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); handle($("kb").value); $("kb").value=""; }});
+$("kbGo").onclick = ()=>{ handle($("kb").value); $("kb").value=""; $("kb").focus(); };
+
+// ---------- aparat na żywo ----------
+let cam = null, camOn = false, lastCode = "", lastTime = 0;
+async function startCam(){
+  if(!window.Html5Qrcode){ say("Nie wczytał się moduł aparatu – sprawdź internet.", "err"); return; }
+  const F = Html5QrcodeSupportedFormats;
+  cam = cam || new Html5Qrcode("reader", {
+    formatsToSupport:[F.QR_CODE,F.EAN_13,F.EAN_8,F.UPC_A,F.UPC_E,F.CODE_128,F.CODE_39,F.ITF,F.DATA_MATRIX],
+    experimentalFeatures:{useBarCodeDetectorIfSupported:true}, verbose:false });
+  try{
+    await cam.start({facingMode:"environment"}, {fps:10, qrbox:(w,h)=>{const s=Math.floor(Math.min(w,h)*0.75);return {width:s,height:Math.floor(s*0.7)};}},
+      text=>{
+        const now=Date.now();
+        if(text===lastCode && now-lastTime<1800) return;   // ten sam kod – odczekaj
+        lastCode=text; lastTime=now; handle(text);
+      }, ()=>{});
+    camOn = true; $("camBtn").textContent="⏹ Wyłącz aparat"; $("camBtn").classList.add("stop");
+    if(nextStep()==="co") say("Zeskanuj kod kreskowy towaru.");
+  }catch(e){
+    say("Brak dostępu do aparatu. Zezwól na aparat w przeglądarce (ikona kłódki przy adresie).", "err");
+  }
+}
+async function stopCam(){
+  try{ await cam.stop(); }catch(e){}
+  camOn=false; $("camBtn").textContent="📷 Włącz aparat"; $("camBtn").classList.remove("stop");
+}
+$("camBtn").onclick = ()=> camOn ? stopCam() : startCam();
+document.addEventListener("visibilitychange", ()=>{ if(document.hidden && camOn) stopCam(); });
+
+// ---------- start ----------
+rows = LS.get("vm_rows", []);
+render(); drawLog(); status(); flush(); pull();
+</script>
+</body>
+</html>
