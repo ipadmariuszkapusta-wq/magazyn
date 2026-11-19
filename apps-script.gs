@@ -22,11 +22,18 @@ function wydania_() {
   return sheet_(WYDANIA, ['Czas', 'Kod', 'Nazwa', 'Jednostka', 'Ilość', 'Kto', 'ID'], 2);
 }
 
+function przygotuj() {
+  wydania_();
+  sheet_(TOWARY, ['Kod kreskowy', 'Nazwa'], 1);
+}
+
 function doPost(e) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
     const r = JSON.parse(e.postData.contents);
+    if (r.typ === 'anuluj') return json_(anuluj_(String(r.id)));
+    if (r.typ === 'towar') return json_(zapiszTowar_(String(r.kod).trim(), String(r.nazwa).trim()));
     const s = wydania_();
     const last = s.getLastRow();
     if (last > 1) {
@@ -34,11 +41,41 @@ function doPost(e) {
       const ids = s.getRange(last - n + 1, 7, n, 1).getValues().flat();
       if (ids.indexOf(r.id) !== -1) return json_({ ok: true, dup: true });
     }
-    s.appendRow([new Date(r.t), String(r.co), r.nazwa || '', r.jednostka, Number(r.ile), r.kto, r.id]);
+    s.appendRow([new Date(r.t), String(r.co), String(r.nazwa || ''), r.jednostka, Number(r.ile), r.kto, r.id]);
     return json_({ ok: true });
   } finally {
     lock.releaseLock();
   }
+}
+
+function anuluj_(id) {
+  const s = wydania_();
+  const last = s.getLastRow();
+  if (last < 2) return { ok: false, notFound: true };
+  const n = Math.min(300, last - 1);
+  const first = last - n + 1;
+  const vals = s.getRange(first, 1, n, 7).getValues();
+  for (let i = vals.length - 1; i >= 0; i--) {
+    if (String(vals[i][6]) === id) {
+      const age = Date.now() - new Date(vals[i][0]).getTime();
+      if (age > 6 * 60 * 1000) return { ok: false, tooLate: true };
+      s.deleteRow(first + i);
+      return { ok: true };
+    }
+  }
+  return { ok: true, notFound: true };
+}
+
+function zapiszTowar_(kod, nazwa) {
+  const t = sheet_(TOWARY, ['Kod kreskowy', 'Nazwa'], 1);
+  const last = t.getLastRow();
+  if (last > 1) {
+    const kody = t.getRange(2, 1, last - 1, 1).getValues().flat().map(function (k) { return String(k).trim(); });
+    const i = kody.indexOf(kod);
+    if (i !== -1) { t.getRange(i + 2, 2).setValue(nazwa); return { ok: true, updated: true }; }
+  }
+  t.appendRow([kod, nazwa]);
+  return { ok: true };
 }
 
 function doGet(e) {

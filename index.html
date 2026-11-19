@@ -16,6 +16,12 @@
   .st{background:var(--card);border:2px solid var(--line);border-radius:12px;padding:8px 12px;min-height:64px}
   .st .l{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
   .st .v{font-size:19px;font-weight:700;margin-top:3px;word-break:break-all}
+  .st .c{font-size:12px;color:var(--mut);margin-top:2px;word-break:break-all}
+  .st .l a{float:right;text-transform:none;letter-spacing:0;color:var(--acc);font-size:12px}
+  .namebox{margin-top:10px;padding:12px;border:2px solid #f59e0b;background:#fffbeb;border-radius:12px}
+  .nb-t{font-weight:600;font-size:14px}
+  .namebox .row{margin-top:8px}
+  .namebox button{background:#f59e0b;color:#fff;border:0;font-weight:700}
   .st.next{border-color:var(--acc);box-shadow:0 0 0 3px #2563eb22}
   .st.done{border-color:#86efac}
   .msg{margin:10px 0;padding:12px;border-radius:10px;font-weight:600;background:#eef2ff}
@@ -32,6 +38,9 @@
   table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;font-size:14px}
   td,th{padding:8px;border-bottom:1px solid var(--line);text-align:left}
   th{font-size:12px;color:var(--mut);font-weight:600}
+  .undo{padding:4px 8px;border:1px solid #fca5a5;background:#fff;color:var(--err);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+  .undo.sure{background:var(--err);color:#fff}
+  tr.gone td{text-decoration:line-through;color:var(--mut)}
   .flash{animation:fl .35s}
   @keyframes fl{0%{background:#bbf7d0}100%{background:var(--card)}}
 </style>
@@ -41,10 +50,15 @@
   <h1>Magazyn – wydawanie <span class="dot" id="net">…</span></h1>
 
   <div class="steps">
-    <div class="st" id="s-co"><div class="l">1. Co</div><div class="v" id="v-co">—</div></div>
+    <div class="st" id="s-co"><div class="l">1. Co <a href="#" id="rename" hidden>zmień nazwę</a></div><div class="v" id="v-co">—</div><div class="c" id="c-co"></div></div>
     <div class="st" id="s-jedn"><div class="l">2. Opak./sztuki</div><div class="v" id="v-jedn">—</div></div>
     <div class="st" id="s-ile"><div class="l">3. Ile</div><div class="v" id="v-ile">—</div></div>
     <div class="st" id="s-kto"><div class="l">4. Kto</div><div class="v" id="v-kto">—</div></div>
+  </div>
+
+  <div class="namebox" id="namebox" hidden>
+    <div class="nb-t">Nowy towar – wpisz, co to jest. Zapamiętam nazwę dla wszystkich.</div>
+    <div class="row"><input id="nameIn" placeholder="np. Rękawiczki nitrylowe M" autocomplete="off" enterkeyhint="done"><button id="nameOk">Zapisz</button></div>
   </div>
 
   <div class="msg" id="msg">Włącz aparat i zeskanuj kod kreskowy towaru.</div>
@@ -59,12 +73,12 @@
   <div class="hint">Skaner Bluetooth/USB lub terminal: kliknij w pole i skanuj.</div>
 
   <h2>Ostatnie wydania</h2>
-  <table><thead><tr><th>Kiedy</th><th>Co</th><th>Ile</th><th>Kto</th></tr></thead><tbody id="log"><tr><td colspan="4">Ładowanie…</td></tr></tbody></table>
+  <table><thead><tr><th>Kiedy</th><th>Co</th><th>Ile</th><th>Kto</th><th></th></tr></thead><tbody id="log"><tr><td colspan="5">Ładowanie…</td></tr></tbody></table>
   <div class="hint" id="store"></div>
 </div>
 
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script src="config.js?v=2"></script>
+<script src="config.js?v=4"></script>
 <script>
 const API = (window.VM_API || "").trim();          // adres Google Apps Script (config.js)
 const $ = id => document.getElementById(id);
@@ -91,17 +105,23 @@ function beep(ok){
 }
 function feedback(ok){ buzz(ok); beep(ok); }
 
-function nextStep(){ if(!st.co) return "co"; if(!st.jedn) return "jedn"; if(!st.ile) return "ile"; if(!st.kto) return "kto"; return "ok"; }
-const PROMPT = {co:"Zeskanuj kod kreskowy towaru.", jedn:"Zeskanuj OPAKOWANIE albo SZTUKI.", ile:"Zeskanuj ilość (cyfry po kolei).", kto:"Zeskanuj swój kod (kto bierze).", ok:"Sprawdź i zeskanuj POTWIERDŹ."};
+function nextStep(){ if(!st.co) return "co"; if(!NAMES[st.co]) return "nazwa"; if(!st.jedn) return "jedn"; if(!st.ile) return "ile"; if(!st.kto) return "kto"; return "ok"; }
+const PROMPT = {co:"Zeskanuj kod kreskowy towaru.", nazwa:"Nowy towar – wpisz jego nazwę i kliknij Zapisz.", jedn:"Zeskanuj OPAKOWANIE albo SZTUKI.", ile:"Zeskanuj ilość (cyfry po kolei).", kto:"Zeskanuj swój kod (kto bierze).", ok:"Sprawdź i zeskanuj POTWIERDŹ."};
 
 function render(changed){
-  $("v-co").textContent = st.co ? nm(st.co) : "—";
+  const known = st.co && NAMES[st.co];
+  $("v-co").textContent = !st.co ? "—" : (known ? NAMES[st.co] : "❓ nieznany towar");
+  $("c-co").textContent = st.co ? "kod: " + st.co : "";
+  $("rename").hidden = !known;
+  const nb = $("namebox"), showNb = !!st.co && !known;
+  if(showNb && nb.hidden){ $("nameIn").value = ""; nb.hidden = false; setTimeout(()=>$("nameIn").focus(), 50); }
+  if(!showNb && !renaming) nb.hidden = true;
   $("v-jedn").textContent = st.jedn || "—";
   $("v-ile").textContent = st.ile || "—";
   $("v-kto").textContent = st.kto || "—";
   const n = nextStep();
   for(const k of ["co","jedn","ile","kto"]){
-    const el=$("s-"+k); el.classList.toggle("next", k===n); el.classList.toggle("done", !!st[k]);
+    const el=$("s-"+k); el.classList.toggle("next", k===n || (k==="co" && n==="nazwa")); el.classList.toggle("done", !!st[k]);
     if(k===changed){ el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); }
   }
 }
@@ -121,10 +141,10 @@ function handle(raw){
   }
   if(code === "VM:OK"){
     const n = nextStep();
-    if(n !== "ok"){ say("Brakuje danych. "+PROMPT[n], "err"); feedback(false); return; }
+    if(n !== "ok"){ say("Brakuje danych. "+PROMPT[n], "err"); feedback(false); if(n==="nazwa") $("nameIn").focus(); return; }
     const ile = parseInt(st.ile,10);
     if(!ile){ say("Ilość nie może być 0. Zeskanuj POPRAW i ilość jeszcze raz.", "err"); feedback(false); return; }
-    save({co:st.co, nazwa:nm(st.co), jednostka:st.jedn, ile, kto:st.kto}); return;
+    save({co:st.co, nazwa:NAMES[st.co], jednostka:st.jedn, ile, kto:st.kto}); return;
   }
   const prev = {...st}; let changed;
   if(code === "VM:OPAK"){ st.jedn = "opakowanie"; changed="jedn"; }
@@ -136,10 +156,30 @@ function handle(raw){
   }
   else if(code.startsWith("VM:KTO:")){ st.kto = code.slice(7).trim(); changed="kto"; }
   else if(code.startsWith("VM:")){ say("Nieznany kod: "+code, "err"); feedback(false); return; }
-  else { st.co = code; changed="co"; }
+  else { st.co = code; changed="co"; renaming = false; }
   undo.push(prev); if(undo.length>30) undo.shift();
   render(changed); say("✓ "+describe(code)+" — "+PROMPT[nextStep()], "ok"); feedback(true);
 }
+
+// ---------- nazwy towarów ----------
+let renaming = false;
+function saveName(){
+  const name = $("nameIn").value.trim();
+  if(!st.co){ $("namebox").hidden = true; return; }
+  if(name.length < 2){ say("Wpisz nazwę towaru (min. 2 znaki).", "err"); feedback(false); $("nameIn").focus(); return; }
+  NAMES[st.co] = name; LS.set("vm_names", NAMES);
+  queue.push({typ:"towar", kod:st.co, nazwa:name, id:"t"+Date.now().toString(36)}); LS.set("vm_queue", queue);
+  renaming = false; $("namebox").hidden = true; $("nameIn").blur();
+  render("co"); say("✓ Zapisano nazwę: "+name+" — "+PROMPT[nextStep()], "ok"); feedback(true);
+  flush();
+}
+$("nameOk").onclick = saveName;
+$("nameIn").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); saveName(); }});
+$("rename").onclick = e=>{
+  e.preventDefault(); if(!st.co) return;
+  renaming = true; $("nameIn").value = NAMES[st.co] || ""; $("namebox").hidden = false; $("nameIn").focus();
+  say("Popraw nazwę towaru i kliknij Zapisz.");
+};
 
 // ---------- zapis: kolejka lokalna + wysyłka do arkusza ----------
 let queue = LS.get("vm_queue", []);
@@ -147,12 +187,14 @@ function save(r){
   const now = new Date();
   r.id = now.getTime().toString(36) + Math.random().toString(36).slice(2,7);
   r.t = now.getTime(); r.czas = now.toLocaleString("pl-PL");
+  mine[r.id] = r.t; LS.set("vm_mine", mine);
   rows.unshift(r); rows = rows.slice(0,50); LS.set("vm_rows", rows); drawLog();
   queue.push(r); LS.set("vm_queue", queue);
   st = empty(); undo = []; render();
-  say(`Zapisano: ${r.nazwa} – ${r.ile} ${r.jednostka} – ${r.kto}. Następny towar.`, "ok"); feedback(true);
+  say(`Zapisano: ${r.nazwa} – ${r.ile} ${r.jednostka} – ${r.kto}. Pomyłka? „Cofnij” w tabeli (5 min).`, "ok"); feedback(true);
   flush();
 }
+function pendingNames(){ const o={}; queue.filter(q=>q.typ==="towar").forEach(q=>o[q.kod]=q.nazwa); return o; }
 let flushing = false;
 async function flush(){
   if(!API || flushing || !queue.length) { status(); return; }
@@ -178,10 +220,11 @@ async function pull(){
   try{
     const res = await fetch(API + "?list=1");
     const j = await res.json();
-    if(j.towary){ NAMES = j.towary; LS.set("vm_names", NAMES); render(); }
+    if(j.towary){ NAMES = Object.assign({}, j.towary, pendingNames()); LS.set("vm_names", NAMES); render(); }
     if(Array.isArray(j.wpisy)){
-      const pending = queue.map(q=>q.id);
-      rows = queue.slice().reverse().concat(j.wpisy.filter(w=>!pending.includes(w.id)));
+      const pend = queue.filter(q=>!q.typ);
+      const pending = pend.map(q=>q.id);
+      rows = pend.slice().reverse().concat(j.wpisy.filter(w=>!pending.includes(w.id)));
       LS.set("vm_rows", rows); drawLog();
     }
   }catch(e){}
@@ -189,11 +232,42 @@ async function pull(){
 setInterval(()=>{ flush(); pull(); }, 30000);
 window.addEventListener("online", ()=>{ flush(); pull(); });
 
+// ---------- cofanie wpisu (5 minut) ----------
+const UNDO_MS = 5*60*1000;
+let mine = LS.get("vm_mine", {}), sure = null;
+(function cleanMine(){ const now=Date.now(); for(const k in mine) if(now-mine[k] > UNDO_MS*2) delete mine[k]; LS.set("vm_mine", mine); })();
+function canUndo(r){ return r && mine[r.id] && (Date.now() - mine[r.id]) < UNDO_MS; }
+async function cancelEntry(id){
+  const r = rows.find(x=>x.id===id); if(!r) return;
+  if(!canUndo(r)){ say("Minęło 5 minut – tego wpisu nie można już cofnąć.", "err"); feedback(false); drawLog(); return; }
+  const qi = queue.findIndex(q=>q.id===id);
+  if(qi !== -1){ queue.splice(qi,1); LS.set("vm_queue", queue); }
+  else if(API){
+    try{
+      const res = await fetch(API, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify({typ:"anuluj", id})});
+      const j = await res.json();
+      if(j.tooLate){ say("Minęło 5 minut – tego wpisu nie można już cofnąć.", "err"); feedback(false); return; }
+      if(!j.ok){ throw new Error("x"); }
+    }catch(e){ say("Nie udało się cofnąć – sprawdź internet i spróbuj jeszcze raz.", "err"); feedback(false); return; }
+  }
+  delete mine[id]; LS.set("vm_mine", mine);
+  rows = rows.filter(x=>x.id!==id); LS.set("vm_rows", rows); drawLog(); status();
+  say(`Cofnięto: ${r.nazwa||r.co} – ${r.ile} ${r.jednostka} – ${r.kto}.`, "ok"); feedback(true);
+}
+function fmtLeft(r){ const s=Math.max(0, Math.ceil((UNDO_MS-(Date.now()-mine[r.id]))/1000)); return Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); }
+document.addEventListener("click", e=>{
+  const b = e.target.closest(".undo"); if(!b) return;
+  const id = b.dataset.id;
+  if(sure !== id){ sure = id; drawLog(); setTimeout(()=>{ if(sure===id){ sure=null; drawLog(); } }, 4000); return; }
+  sure = null; cancelEntry(id);
+});
+setInterval(()=>{ if(rows.some(canUndo) || document.querySelector(".undo")) drawLog(); }, 1000);
+
 function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 function drawLog(){
   const tb=$("log");
-  if(!rows.length){ tb.innerHTML='<tr><td colspan="4">Brak wpisów.</td></tr>'; return; }
-  tb.innerHTML = rows.slice(0,20).map(r=>`<tr><td>${esc(String(r.czas||"").replace(/:\d\d$/,""))}</td><td>${esc(r.nazwa||r.co)}</td><td>${esc(r.ile)} ${r.jednostka==="opakowanie"?"op.":"szt."}</td><td>${esc(r.kto)}</td></tr>`).join("");
+  if(!rows.length){ tb.innerHTML='<tr><td colspan="5">Brak wpisów.</td></tr>'; return; }
+  tb.innerHTML = rows.slice(0,20).map(r=>`<tr><td>${esc(String(r.czas||"").replace(/:\d\d$/,""))}</td><td>${esc(r.nazwa||r.co)}</td><td>${esc(r.ile)} ${r.jednostka==="opakowanie"?"op.":"szt."}</td><td>${esc(r.kto)}</td><td>${canUndo(r) ? `<button class="undo${sure===r.id?" sure":""}" data-id="${esc(r.id)}">${sure===r.id?"Na pewno?":"Cofnij "+fmtLeft(r)}</button>` : ""}</td></tr>`).join("");
 }
 
 // ---------- klawiatura / skaner sprzętowy ----------
