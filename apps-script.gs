@@ -1,13 +1,13 @@
 /**
  * Magazyn – zapis wydań do Arkusza Google.
- * Wklej do: Arkusz → Rozszerzenia → Apps Script. Potem: Wdróż → Nowe wdrożenie →
+
  * Aplikacja internetowa, "Wykonuj jako: Ja", "Kto ma dostęp: Każdy".
  */
 const WYDANIA = 'Wydania';
 const TOWARY = 'Towary';
 
 function sheet_(name, headers, textCol) {
-  const ss = SpreadsheetApp.getActive();
+  const ss = SpreadsheetApp.openById('1vW_0dEmE_S5252b9FtIoLIa_yzZM8P59wVFuWZXnCmo');
   let s = ss.getSheetByName(name);
   if (!s) {
     s = ss.insertSheet(name);
