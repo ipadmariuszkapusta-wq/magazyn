@@ -76,7 +76,7 @@
   .filebtn{display:inline-block;cursor:pointer}
   .danger{color:#fff;background:var(--err);border-color:var(--err);font-weight:700}
   .wide{width:100%;margin-top:10px}
-  .modes button{padding:10px 4px;font-size:14px}
+  .modes button{padding:10px 2px;font-size:13px;white-space:nowrap}
   .srow{display:flex;gap:8px}
   .srow #q{flex:1;width:auto}
   #mic{width:56px;border:2px solid var(--acc);background:#fff;border-radius:12px;font-size:24px;cursor:pointer}
@@ -495,7 +495,8 @@ async function adLoadWyd(){
 }
 async function adDelete(body, label){
   try{ const j=await adPost(Object.assign({typ:"wydania_usun"},body)); if(!j.ok) throw 0;
-    say(`Usunięto ${j.usunieto} ${label}.`, "ok"); feedback(true); await adLoadWyd(); pull();
+    const n=j.usunieto, w=n===1?"wydanie":(n%10>=2&&n%10<=4&&(n%100<10||n%100>=20))?"wydania":"wydań";
+    say(`Usunięto ${n} ${w}${label}.`, "ok"); feedback(true); await adLoadWyd(); pull();
   }catch(e){ say("Nie udało się usunąć.", "err"); }
 }
 $("adDelSel").onclick=()=>{
@@ -504,14 +505,14 @@ $("adDelSel").onclick=()=>{
   const b=$("adDelSel");
   if(b.dataset.sure!=="1"){ b.dataset.sure="1"; b.textContent=`Na pewno usunąć ${ids.length}?`; setTimeout(()=>{ b.dataset.sure=""; b.textContent="🗑 Usuń zaznaczone"; },4000); return; }
   b.dataset.sure=""; b.textContent="🗑 Usuń zaznaczone";
-  adDelete({ids}, "wydań");
+  adDelete({ids}, "");
 };
 $("adDelDate").onclick=()=>{
   const d=$("adDate").value; if(!d){ say("Wybierz datę.", "err"); return; }
   const b=$("adDelDate");
   if(b.dataset.sure!=="1"){ b.dataset.sure="1"; b.textContent="Na pewno?"; setTimeout(()=>{ b.dataset.sure=""; b.textContent="Usuń"; },4000); return; }
   b.dataset.sure=""; b.textContent="Usuń";
-  adDelete({doDnia:d}, "wydań do "+d.split("-").reverse().join("."));
+  adDelete({doDnia:d}, " (do "+d.split("-").reverse().join(".")+")");
 };
 
 // ---------- wyszukiwarka ----------
