@@ -61,6 +61,21 @@
   .big.ok:disabled{background:#9ca3af}
   .cancel{width:100%;margin-top:8px;color:var(--mut)}
   [hidden]{display:none!important}
+  .adsec{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px}
+  .adsec h3{margin:0 0 8px;font-size:16px}
+  .adsec input:not([type=checkbox]){width:100%;padding:12px;font-size:16px;border:1px solid var(--line);border-radius:10px;margin-top:6px}
+  .srow input{margin-top:0!important}
+  .adlist{list-style:none;padding:0;margin:0}
+  .adlist li{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .adlist li .grow{flex:1;min-width:0}
+  .adlist .av{width:40px;height:40px;font-size:15px}
+  .adlist .x{border:0;background:none;color:var(--err);font-size:20px;cursor:pointer}
+  .adphoto{display:flex;align-items:center;gap:12px;margin:10px 0}
+  .av.big{width:72px;height:72px;background:#e5e7eb;font-size:26px;color:#6b7280}
+  img.av.big{background:none}
+  .filebtn{display:inline-block;cursor:pointer}
+  .danger{color:#fff;background:var(--err);border-color:var(--err);font-weight:700}
+  .wide{width:100%;margin-top:10px}
   .modes button{padding:10px 4px;font-size:14px}
   .srow{display:flex;gap:8px}
   .srow #q{flex:1;width:auto}
@@ -88,7 +103,7 @@
 <body>
 <div class="wrap">
   <h1>Magazyn – wydawanie <span class="dot" id="net">…</span></h1>
-  <div class="modes"><button id="m-ekran">📦 Wydawanie</button><button id="m-miejsca">📍 Miejsca</button><button id="m-szukaj">🔍 Szukaj</button></div>
+  <div class="modes"><button id="m-ekran">📦 Wydaj</button><button id="m-miejsca">📍 Miejsca</button><button id="m-szukaj">🔍 Szukaj</button><button id="m-admin">🎛️ Admin</button></div>
 
   <div id="locPanel" hidden>
     <div class="tl">1. Kto rozkłada</div>
@@ -99,6 +114,44 @@
     <ul class="loclist" id="locList"></ul>
     <button class="big ok" id="locOk" disabled>✔ POTWIERDŹ</button>
     <div class="hint">Wybierz siebie → zeskanuj kod półki → skanuj po kolei towary z tej półki → Potwierdź. Przeniesienie towaru robisz tak samo: zeskanuj nową półkę i ten towar.</div>
+  </div>
+
+  <div id="adminPanel" hidden>
+    <div id="adLogin">
+      <div class="tl">Panel administratora</div>
+      <div class="srow"><input id="adPass" type="password" inputmode="numeric" placeholder="Hasło" autocomplete="off"><button class="sm" id="adGo">Wejdź</button></div>
+    </div>
+    <div id="adBody" hidden>
+      <div class="adsec">
+        <h3>👤 Osoby</h3>
+        <ul class="adlist" id="adPeople"></ul>
+        <div class="tl">Dodaj osobę</div>
+        <input id="adName" placeholder="Imię (i nazwisko)" autocomplete="off">
+        <div class="adphoto">
+          <div class="av big" id="adPrev">📷</div>
+          <label class="sm filebtn">Zrób / wybierz zdjęcie<input type="file" id="adFile" accept="image/*" capture="user" hidden></label>
+        </div>
+        <button class="big ok" id="adAddPerson">➕ Dodaj osobę</button>
+      </div>
+      <div class="adsec">
+        <h3>📦 Produkty</h3>
+        <div class="hint">Zeskanuj kod produktu (albo wpisz), podaj nazwę i zapisz. Istniejący kod = zmiana nazwy.</div>
+        <input id="adCode" placeholder="Kod kreskowy" autocomplete="off">
+        <input id="adPName" placeholder="Nazwa produktu" autocomplete="off">
+        <div class="hint" id="adPInfo"></div>
+        <div class="row"><button class="big ok" id="adSaveProd">💾 Zapisz produkt</button></div>
+        <button class="sm cancel" id="adDelProd">🗑 Usuń ten produkt z listy</button>
+      </div>
+      <div class="adsec">
+        <h3>🧾 Wydania</h3>
+        <div class="tl">Usuń wszystkie wydania do dnia (włącznie)</div>
+        <div class="srow"><input id="adDate" type="date"><button class="sm danger" id="adDelDate">Usuń</button></div>
+        <div class="tl">Albo zaznacz pojedyncze</div>
+        <ul class="adlist" id="adWyd"><li class="hint">Ładowanie…</li></ul>
+        <button class="sm danger wide" id="adDelSel">🗑 Usuń zaznaczone</button>
+      </div>
+      <button class="sm cancel" id="adOut">Wyloguj z panelu</button>
+    </div>
   </div>
 
   <div id="searchPanel" hidden>
@@ -147,7 +200,7 @@
 </div>
 
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script src="config.js?v=7"></script>
+<script src="config.js?v=8"></script>
 <script>
 const API = (window.VM_API || "").trim();          // adres Google Apps Script (config.js)
 const $ = id => document.getElementById(id);
@@ -211,6 +264,11 @@ function handle(raw){
   const code = String(raw||"").trim();
   if(!code) return;
   if(mode==="miejsca") return handleLoc(code);
+  if(mode==="admin"){
+    if(!adPass){ say("Najpierw wpisz hasło.", "err"); return; }
+    if(code.startsWith("VM:")){ say("W panelu skanuj kod produktu.", "err"); return; }
+    $("adCode").value=code; adShowProd(); $("adPName").focus(); feedback(true); return;
+  }
   if(mode==="szukaj"){
     if(code.startsWith("VM:")){ say("W wyszukiwarce skanuj kod z opakowania.", "err"); feedback(false); return; }
     $("q").value=""; doSearch(code);
@@ -270,7 +328,7 @@ function renderTouch(){
   for(const b of document.querySelectorAll(".modes button")) b.classList.toggle("on", b.id==="m-"+mode);
   const issue = mode==="ekran";
   $("steps").hidden = !issue; $("hist").hidden = !issue;
-  $("locPanel").hidden = mode!=="miejsca"; $("searchPanel").hidden = mode!=="szukaj";
+  $("locPanel").hidden = mode!=="miejsca"; $("searchPanel").hidden = mode!=="szukaj"; $("adminPanel").hidden = mode!=="admin";
   if(!issue && !renaming && !pendingAssign) $("namebox").hidden = true;
   const show = mode==="ekran" && !!st.co && !!NAMES[st.co];
   $("touch").hidden = !show;
@@ -291,6 +349,7 @@ function setMode(m){
 $("m-ekran").onclick=()=>setMode("ekran");
 $("m-miejsca").onclick=()=>setMode("miejsca");
 $("m-szukaj").onclick=()=>setMode("szukaj");
+$("m-admin").onclick=()=>{ setMode("admin"); adRender(); say(adPass ? "Panel administratora." : "Wpisz hasło administratora."); };
 
 // ---------- miejsca (szafa / półka) ----------
 let curLoc = "", locKto = LS.get("vm_lockto", ""), pendingAssign = "", batch = [];
@@ -346,6 +405,113 @@ $("locOk").onclick=()=>{
   LS.set("vm_miejsca", MIEJSCA); LS.set("vm_ustawil", USTAWIL); LS.set("vm_queue", queue);
   const n=batch.length; batch=[]; drawLoc(); flush();
   say(`Zapisano ${n} ${n===1?"towar":"towary/ów"} na: ${curLoc}. Zeskanuj kolejną półkę.`, "ok"); feedback(true);
+};
+
+// ---------- panel administratora ----------
+let adPass = (()=>{ try{ return sessionStorage.getItem("vm_ad")||""; }catch(e){ return ""; } })();
+let adPhoto = "", adWpisy = [];
+async function adPost(body){
+  const r = await fetch(API,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(Object.assign({haslo:adPass},body))});
+  return r.json();
+}
+function adRender(){
+  $("adLogin").hidden = !!adPass; $("adBody").hidden = !adPass;
+  if(!adPass) return;
+  $("adPeople").innerHTML = OSOBY.length ? OSOBY.map((o,i)=>{
+    const u=photoUrl(o.zdjecie), col=COLORS[i%COLORS.length];
+    const av = u ? `<img class="av" src="${esc(u)}" alt="">` : `<div class="av" style="background:${col}">${esc(initials(o.imie))}</div>`;
+    return `<li>${av}<span class="grow">${esc(o.imie)}</span><button class="x" data-del="${esc(o.imie)}" title="Usuń">✕</button></li>`;
+  }).join("") : '<li class="hint">Brak osób.</li>';
+  adLoadWyd();
+}
+$("adGo").onclick = async ()=>{
+  const p=$("adPass").value.trim(); if(!p) return;
+  try{
+    adPass=p; const j=await adPost({typ:"admin_check"});
+    if(!j.ok){ adPass=""; say("Złe hasło.", "err"); feedback(false); return; }
+    try{ sessionStorage.setItem("vm_ad", p); }catch(e){}
+    $("adPass").value=""; adRender(); say("Panel administratora odblokowany.", "ok"); feedback(true);
+  }catch(e){ adPass=""; say("Brak połączenia.", "err"); }
+};
+$("adPass").addEventListener("keydown",e=>{ if(e.key==="Enter") $("adGo").click(); });
+$("adOut").onclick=()=>{ adPass=""; try{ sessionStorage.removeItem("vm_ad"); }catch(e){} adRender(); say("Wylogowano z panelu."); };
+// zdjęcie: kadrowanie do kwadratu 160 px, JPEG
+$("adFile").addEventListener("change", async e=>{
+  const f=e.target.files&&e.target.files[0]; e.target.value=""; if(!f) return;
+  try{
+    const bmp=await createImageBitmap(f); const S=160, m=Math.min(bmp.width,bmp.height);
+    const cv=document.createElement("canvas"); cv.width=cv.height=S;
+    cv.getContext("2d").drawImage(bmp,(bmp.width-m)/2,(bmp.height-m)/2,m,m,0,0,S,S);
+    adPhoto=cv.toDataURL("image/jpeg",0.7);
+    $("adPrev").outerHTML=`<img class="av big" id="adPrev" src="${adPhoto}" alt="">`;
+  }catch(err){ say("Nie udało się wczytać zdjęcia.", "err"); }
+});
+$("adAddPerson").onclick = async ()=>{
+  const imie=$("adName").value.trim(); if(imie.length<2){ say("Wpisz imię.", "err"); return; }
+  $("adAddPerson").disabled=true; say("Zapisuję…");
+  try{
+    const j=await adPost({typ:"osoba_dodaj", imie, zdjecie:adPhoto});
+    if(!j.ok) throw new Error(j.err||"x");
+    $("adName").value=""; adPhoto=""; $("adPrev").outerHTML='<div class="av big" id="adPrev">📷</div>';
+    await pull(); adRender(); say("✓ Dodano: "+imie, "ok"); feedback(true);
+  }catch(e){ say("Nie udało się dodać osoby.", "err"); }
+  $("adAddPerson").disabled=false;
+};
+$("adPeople").addEventListener("click", async e=>{
+  const b=e.target.closest("[data-del]"); if(!b) return;
+  if(b.dataset.sure!=="1"){ b.dataset.sure="1"; b.textContent="Usunąć?"; setTimeout(()=>{ b.dataset.sure=""; b.textContent="✕"; },4000); return; }
+  try{ const j=await adPost({typ:"osoba_usun", imie:b.dataset.del}); if(!j.ok) throw 0; await pull(); adRender(); say("Usunięto osobę: "+b.dataset.del, "ok"); }
+  catch(e){ say("Nie udało się usunąć.", "err"); }
+});
+function adShowProd(){
+  const k=$("adCode").value.trim();
+  if(!k){ $("adPInfo").textContent=""; return; }
+  if(NAMES[k]){ $("adPName").value=NAMES[k]; $("adPInfo").textContent="Ten kod już jest na liście"+(MIEJSCA[k]?" · 📍 "+MIEJSCA[k]:"")+" – możesz zmienić nazwę."; }
+  else { $("adPInfo").textContent="Nowy kod – wpisz nazwę."; }
+}
+$("adCode").addEventListener("change", adShowProd);
+$("adCode").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); adShowProd(); $("adPName").focus(); }});
+$("adSaveProd").onclick = async ()=>{
+  const kod=$("adCode").value.trim(), nazwa=$("adPName").value.trim();
+  if(!kod||nazwa.length<2){ say("Podaj kod i nazwę.", "err"); return; }
+  try{ const j=await adPost({typ:"towar", kod, nazwa}); if(!j.ok) throw 0;
+    NAMES[kod]=nazwa; LS.set("vm_names", NAMES); $("adCode").value=""; $("adPName").value=""; $("adPInfo").textContent="";
+    say("✓ Zapisano produkt: "+nazwa, "ok"); feedback(true);
+  }catch(e){ say("Nie udało się zapisać.", "err"); }
+};
+$("adDelProd").onclick = async ()=>{
+  const kod=$("adCode").value.trim(); if(!kod||!NAMES[kod]){ say("Zeskanuj lub wpisz kod istniejącego produktu.", "err"); return; }
+  const b=$("adDelProd");
+  if(b.dataset.sure!=="1"){ b.dataset.sure="1"; b.textContent="Na pewno usunąć „"+NAMES[kod]+"”?"; setTimeout(()=>{ b.dataset.sure=""; b.textContent="🗑 Usuń ten produkt z listy"; },4000); return; }
+  b.dataset.sure=""; b.textContent="🗑 Usuń ten produkt z listy";
+  try{ const j=await adPost({typ:"towar_usun", kod}); if(!j.ok) throw 0;
+    const n=NAMES[kod]; delete NAMES[kod]; LS.set("vm_names", NAMES); $("adCode").value=""; $("adPName").value=""; $("adPInfo").textContent="";
+    say("Usunięto produkt: "+n, "ok");
+  }catch(e){ say("Nie udało się usunąć.", "err"); }
+};
+async function adLoadWyd(){
+  try{ const j=await fetch(API+"?n=200").then(r=>r.json()); adWpisy=j.wpisy||[]; }catch(e){ adWpisy=[]; }
+  $("adWyd").innerHTML = adWpisy.length ? adWpisy.map(w=>`<li><input type="checkbox" value="${esc(w.id)}"><span class="grow">${esc(String(w.czas).replace(/:\d\d$/,""))} · <b>${esc(w.nazwa||w.co)}</b> · ${esc(w.ile)} ${w.jednostka==="opakowanie"?"op.":"szt."} · ${esc(w.kto)}</span></li>`).join("") : '<li class="hint">Brak wydań.</li>';
+}
+async function adDelete(body, label){
+  try{ const j=await adPost(Object.assign({typ:"wydania_usun"},body)); if(!j.ok) throw 0;
+    say(`Usunięto ${j.usunieto} ${label}.`, "ok"); feedback(true); await adLoadWyd(); pull();
+  }catch(e){ say("Nie udało się usunąć.", "err"); }
+}
+$("adDelSel").onclick=()=>{
+  const ids=[...document.querySelectorAll("#adWyd input:checked")].map(c=>c.value);
+  if(!ids.length){ say("Zaznacz wydania do usunięcia.", "err"); return; }
+  const b=$("adDelSel");
+  if(b.dataset.sure!=="1"){ b.dataset.sure="1"; b.textContent=`Na pewno usunąć ${ids.length}?`; setTimeout(()=>{ b.dataset.sure=""; b.textContent="🗑 Usuń zaznaczone"; },4000); return; }
+  b.dataset.sure=""; b.textContent="🗑 Usuń zaznaczone";
+  adDelete({ids}, "wydań");
+};
+$("adDelDate").onclick=()=>{
+  const d=$("adDate").value; if(!d){ say("Wybierz datę.", "err"); return; }
+  const b=$("adDelDate");
+  if(b.dataset.sure!=="1"){ b.dataset.sure="1"; b.textContent="Na pewno?"; setTimeout(()=>{ b.dataset.sure=""; b.textContent="Usuń"; },4000); return; }
+  b.dataset.sure=""; b.textContent="Usuń";
+  adDelete({doDnia:d}, "wydań do "+d.split("-").reverse().join("."));
 };
 
 // ---------- wyszukiwarka ----------
