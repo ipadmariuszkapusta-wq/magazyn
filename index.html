@@ -41,6 +41,25 @@
   .undo{padding:4px 8px;border:1px solid #fca5a5;background:#fff;color:var(--err);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
   .undo.sure{background:var(--err);color:#fff}
   tr.gone td{text-decoration:line-through;color:var(--mut)}
+  .modes{display:flex;gap:6px;margin:0 0 10px;background:#e5e7eb;padding:4px;border-radius:12px}
+  .modes button{flex:1;padding:10px;border:0;border-radius:9px;background:transparent;font-size:15px;font-weight:600;color:var(--mut);cursor:pointer}
+  .modes button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px #0002}
+  #touch{margin:10px 0;padding:12px;background:#fff;border:2px solid var(--line);border-radius:14px}
+  .tl{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin:10px 0 6px}
+  .tl:first-child{margin-top:0}
+  .seg{display:flex;gap:8px}
+  .seg button{flex:1;padding:16px 8px;font-size:17px;font-weight:700;border:2px solid var(--line);background:#fff;border-radius:12px;cursor:pointer}
+  .seg button.on{border-color:var(--acc);background:#eff6ff;color:var(--acc)}
+  .cnt{display:flex;align-items:center;gap:10px}
+  .cnt button{width:64px;height:64px;font-size:34px;font-weight:700;border:2px solid var(--line);background:#fff;border-radius:14px;cursor:pointer;line-height:1}
+  .cnt input{flex:1;height:64px;font-size:34px;font-weight:800;text-align:center;border:2px solid var(--line);border-radius:14px;min-width:0}
+  .people{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px}
+  .people button{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 4px;border:2px solid var(--line);background:#fff;border-radius:12px;cursor:pointer;font-size:13px;font-weight:600}
+  .people button.on{border-color:var(--ok);background:var(--okbg)}
+  .av{width:56px;height:56px;border-radius:50%;object-fit:cover;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#fff}
+  .big.ok{background:var(--ok);margin-top:14px}
+  .big.ok:disabled{background:#9ca3af}
+  .cancel{width:100%;margin-top:8px;color:var(--mut)}
   .flash{animation:fl .35s}
   @keyframes fl{0%{background:#bbf7d0}100%{background:var(--card)}}
 </style>
@@ -48,6 +67,7 @@
 <body>
 <div class="wrap">
   <h1>Magazyn – wydawanie <span class="dot" id="net">…</span></h1>
+  <div class="modes"><button id="m-qr">🔳 Kody QR</button><button id="m-ekran">👆 Ekran</button></div>
 
   <div class="steps">
     <div class="st" id="s-co"><div class="l">1. Co <a href="#" id="rename" hidden>zmień nazwę</a></div><div class="v" id="v-co">—</div><div class="c" id="c-co"></div></div>
@@ -62,6 +82,17 @@
   </div>
 
   <div class="msg" id="msg">Włącz aparat i zeskanuj kod kreskowy towaru.</div>
+
+  <div id="touch" hidden>
+    <div class="tl">Jednostka</div>
+    <div class="seg"><button data-j="opakowanie">📦 Opakowanie</button><button data-j="sztuki">🔹 Sztuki</button></div>
+    <div class="tl">Ilość</div>
+    <div class="cnt"><button id="minus">−</button><input id="cntIn" type="number" inputmode="numeric" min="1" max="99999" value="1"><button id="plus">+</button></div>
+    <div class="tl">Kto bierze</div>
+    <div class="people" id="people"></div>
+    <button class="big ok" id="confirmBtn">✔ ZATWIERDŹ</button>
+    <button class="sm cancel" id="cancelBtn">Anuluj ten towar</button>
+  </div>
 
   <div id="reader"></div>
   <button class="big" id="camBtn">📷 Włącz aparat</button>
@@ -78,7 +109,7 @@
 </div>
 
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script src="config.js?v=4"></script>
+<script src="config.js?v=5"></script>
 <script>
 const API = (window.VM_API || "").trim();          // adres Google Apps Script (config.js)
 const $ = id => document.getElementById(id);
@@ -90,6 +121,8 @@ const LS = {
   set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
 };
 NAMES = LS.get("vm_names", {});
+let mode = LS.get("vm_mode", "qr");
+let OSOBY = LS.get("vm_osoby", []);
 const nm = c => NAMES[c] || c;
 
 function say(t, kind){ const m=$("msg"); m.textContent=t; m.className="msg"+(kind?" "+kind:""); }
@@ -106,6 +139,8 @@ function beep(ok){
 function feedback(ok){ buzz(ok); beep(ok); }
 
 function nextStep(){ if(!st.co) return "co"; if(!NAMES[st.co]) return "nazwa"; if(!st.jedn) return "jedn"; if(!st.ile) return "ile"; if(!st.kto) return "kto"; return "ok"; }
+function P(k){ return (mode==="ekran" && PROMPT_EK[k]) || PROMPT[k]; }
+const PROMPT_EK = {jedn:"Wybierz: Opakowanie albo Sztuki.", ile:"Ustaw ilość przyciskami − / +.", kto:"Wybierz, kto bierze.", ok:"Sprawdź i kliknij ZATWIERDŹ."};
 const PROMPT = {co:"Zeskanuj kod kreskowy towaru.", nazwa:"Nowy towar – wpisz jego nazwę i kliknij Zapisz.", jedn:"Zeskanuj OPAKOWANIE albo SZTUKI.", ile:"Zeskanuj ilość (cyfry po kolei).", kto:"Zeskanuj swój kod (kto bierze).", ok:"Sprawdź i zeskanuj POTWIERDŹ."};
 
 function render(changed){
@@ -119,6 +154,7 @@ function render(changed){
   $("v-jedn").textContent = st.jedn || "—";
   $("v-ile").textContent = st.ile || "—";
   $("v-kto").textContent = st.kto || "—";
+  renderTouch();
   const n = nextStep();
   for(const k of ["co","jedn","ile","kto"]){
     const el=$("s-"+k); el.classList.toggle("next", k===n || (k==="co" && n==="nazwa")); el.classList.toggle("done", !!st[k]);
@@ -137,11 +173,11 @@ function handle(raw){
   if(!code) return;
   if(code === "VM:POPRAW"){
     if(!undo.length){ say("Nie ma czego cofać.", "err"); feedback(false); return; }
-    st = undo.pop(); render(); say("Cofnięto ostatnie skanowanie. "+PROMPT[nextStep()], "ok"); feedback(true); return;
+    st = undo.pop(); render(); say("Cofnięto ostatnie skanowanie. "+P(nextStep()), "ok"); feedback(true); return;
   }
   if(code === "VM:OK"){
     const n = nextStep();
-    if(n !== "ok"){ say("Brakuje danych. "+PROMPT[n], "err"); feedback(false); if(n==="nazwa") $("nameIn").focus(); return; }
+    if(n !== "ok"){ say("Brakuje danych. "+P(n), "err"); feedback(false); if(n==="nazwa") $("nameIn").focus(); return; }
     const ile = parseInt(st.ile,10);
     if(!ile){ say("Ilość nie może być 0. Zeskanuj POPRAW i ilość jeszcze raz.", "err"); feedback(false); return; }
     save({co:st.co, nazwa:NAMES[st.co], jednostka:st.jedn, ile, kto:st.kto}); return;
@@ -156,10 +192,65 @@ function handle(raw){
   }
   else if(code.startsWith("VM:KTO:")){ st.kto = code.slice(7).trim(); changed="kto"; }
   else if(code.startsWith("VM:")){ say("Nieznany kod: "+code, "err"); feedback(false); return; }
-  else { st.co = code; changed="co"; renaming = false; }
+  else { st.co = code; changed="co"; renaming = false; if(mode==="ekran"){ st.ile = st.ile || "1"; } }
   undo.push(prev); if(undo.length>30) undo.shift();
-  render(changed); say("✓ "+describe(code)+" — "+PROMPT[nextStep()], "ok"); feedback(true);
+  render(changed); say("✓ "+describe(code)+" — "+P(nextStep()), "ok"); feedback(true);
 }
+
+// ---------- tryb ekranowy ----------
+const COLORS=["#2563eb","#16a34a","#db2777","#ea580c","#7c3aed","#0891b2","#ca8a04","#dc2626"];
+function photoUrl(u){
+  u=String(u||"").trim(); if(!u) return "";
+  const m=u.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?.*id=)([\w-]{20,})/);
+  return m ? "https://drive.google.com/thumbnail?id="+m[1]+"&sz=w200" : u;
+}
+function initials(n){ return String(n).split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join(""); }
+function drawPeople(){
+  const box=$("people");
+  if(!OSOBY.length){ box.innerHTML='<div class="hint">Brak osób – dodaj je w arkuszu, zakładka „Osoby”.</div>'; return; }
+  box.innerHTML = OSOBY.map((o,i)=>{
+    const u=photoUrl(o.zdjecie), col=COLORS[i%COLORS.length];
+    const av = u ? `<img class="av" src="${esc(u)}" alt="" data-col="${col}" data-ini="${esc(initials(o.imie))}">`
+                 : `<div class="av" style="background:${col}">${esc(initials(o.imie))}</div>`;
+    return `<button data-kto="${esc(o.imie)}">${av}<span>${esc(o.imie)}</span></button>`;
+  }).join("");
+  for(const img of box.querySelectorAll("img.av")) img.addEventListener("error",()=>{ const d=document.createElement("div"); d.className="av"; d.style.background=img.dataset.col; d.textContent=img.dataset.ini; img.replaceWith(d); });
+  render();
+}
+function renderTouch(){
+  for(const b of document.querySelectorAll(".modes button")) b.classList.toggle("on", b.id==="m-"+mode);
+  const show = mode==="ekran" && !!st.co && !!NAMES[st.co];
+  $("touch").hidden = !show;
+  if(!show) return;
+  for(const b of document.querySelectorAll(".seg button")) b.classList.toggle("on", b.dataset.j===st.jedn);
+  if(document.activeElement!==$("cntIn")) $("cntIn").value = st.ile || "1";
+  for(const b of document.querySelectorAll("#people button")) b.classList.toggle("on", b.dataset.kto===st.kto);
+  $("confirmBtn").disabled = nextStep()!=="ok";
+}
+function setMode(m){
+  mode=m; LS.set("vm_mode", m);
+  if(m==="ekran" && st.co && !st.ile) st.ile="1";
+  render(); say(st.co ? P(nextStep()) : (m==="ekran" ? "Tryb ekranowy: zeskanuj kod towaru, resztę wybierz na ekranie." : "Tryb kodów QR: zeskanuj kod towaru, potem kody z drzwi."));
+}
+$("m-qr").onclick=()=>setMode("qr");
+$("m-ekran").onclick=()=>setMode("ekran");
+document.querySelector(".seg").addEventListener("click",e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  st.jedn=b.dataset.j; render("jedn"); say("✓ "+st.jedn+" — "+P(nextStep()),"ok"); buzz(true);
+});
+function setQty(n){
+  n=Math.max(1,Math.min(99999,parseInt(n,10)||1)); st.ile=String(n); $("cntIn").value=n; render("ile");
+}
+$("minus").onclick=()=>{ setQty((parseInt(st.ile,10)||1)-1); buzz(true); };
+$("plus").onclick=()=>{ setQty((parseInt(st.ile,10)||0)+1); buzz(true); };
+$("cntIn").addEventListener("change",()=>setQty($("cntIn").value));
+$("cntIn").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); $("cntIn").blur(); setQty($("cntIn").value); }});
+$("people").addEventListener("click",e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  st.kto=b.dataset.kto; render("kto"); say("✓ "+st.kto+" — "+P(nextStep()),"ok"); buzz(true);
+});
+$("confirmBtn").onclick=()=>{ if(document.activeElement===$("cntIn")) setQty($("cntIn").value); handle("VM:OK"); };
+$("cancelBtn").onclick=()=>{ st=empty(); undo=[]; render(); say("Anulowano. "+P("co")); };
 
 // ---------- nazwy towarów ----------
 let renaming = false;
@@ -170,7 +261,7 @@ function saveName(){
   NAMES[st.co] = name; LS.set("vm_names", NAMES);
   queue.push({typ:"towar", kod:st.co, nazwa:name, id:"t"+Date.now().toString(36)}); LS.set("vm_queue", queue);
   renaming = false; $("namebox").hidden = true; $("nameIn").blur();
-  render("co"); say("✓ Zapisano nazwę: "+name+" — "+PROMPT[nextStep()], "ok"); feedback(true);
+  render("co"); say("✓ Zapisano nazwę: "+name+" — "+P(nextStep()), "ok"); feedback(true);
   flush();
 }
 $("nameOk").onclick = saveName;
@@ -220,6 +311,7 @@ async function pull(){
   try{
     const res = await fetch(API + "?list=1");
     const j = await res.json();
+    if(Array.isArray(j.osoby)){ const same=JSON.stringify(j.osoby)===JSON.stringify(OSOBY); OSOBY=j.osoby; LS.set("vm_osoby", OSOBY); if(!same){ drawPeople(); render(); } }
     if(j.towary){ NAMES = Object.assign({}, j.towary, pendingNames()); LS.set("vm_names", NAMES); render(); }
     if(Array.isArray(j.wpisy)){
       const pend = queue.filter(q=>!q.typ);
@@ -303,6 +395,7 @@ $("camBtn").onclick = ()=> camOn ? stopCam() : startCam();
 document.addEventListener("visibilitychange", ()=>{ if(document.hidden && camOn) stopCam(); });
 
 // ---------- start ----------
+drawPeople();
 rows = LS.get("vm_rows", []);
 render(); drawLog(); status(); flush(); pull();
 </script>

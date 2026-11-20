@@ -22,7 +22,20 @@ function wydania_() {
   return sheet_(WYDANIA, ['Czas', 'Kod', 'Nazwa', 'Jednostka', 'Ilość', 'Kto', 'ID'], 2);
 }
 
+function osoby_() {
+  const ss = SpreadsheetApp.openById('1vW_0dEmE_S5252b9FtIoLIa_yzZM8P59wVFuWZXnCmo');
+  let s = ss.getSheetByName('Osoby');
+  if (!s) {
+    s = ss.insertSheet('Osoby');
+    s.appendRow(['Imię', 'Zdjęcie (link)']);
+    s.setFrozenRows(1);
+    for (let i = 1; i <= 6; i++) s.appendRow(['Osoba ' + i, '']);
+  }
+  return s;
+}
+
 function przygotuj() {
+  osoby_();
   wydania_();
   sheet_(TOWARY, ['Kod kreskowy', 'Nazwa'], 1);
 }
@@ -98,7 +111,14 @@ function doGet(e) {
       if (v[0] !== '') towary[String(v[0]).trim()] = String(v[1]);
     });
   }
-  return json_({ wpisy: wpisy, towary: towary });
+  const os = osoby_();
+  const osoby = [];
+  if (os.getLastRow() > 1) {
+    os.getRange(2, 1, os.getLastRow() - 1, 2).getValues().forEach(function (v) {
+      if (String(v[0]).trim() !== '') osoby.push({ imie: String(v[0]).trim(), zdjecie: String(v[1]).trim() });
+    });
+  }
+  return json_({ wpisy: wpisy, towary: towary, osoby: osoby });
 }
 
 function json_(o) {
