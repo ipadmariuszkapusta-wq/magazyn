@@ -92,6 +92,9 @@
   .loclist,.res{list-style:none;padding:0;margin:10px 0 0}
   .loclist li,.res li{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:6px;font-size:14px}
   .res li b{display:block;font-size:15px}
+  .res li.pick{cursor:pointer;position:relative;padding-right:84px}
+  .res li.pick:active{background:#eff6ff}
+  .res .go{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:var(--acc);color:#fff;font-weight:700;font-size:14px;padding:8px 10px;border-radius:10px}
   .res .where{margin-top:4px;font-weight:700;color:var(--acc)}
   .res .where.none{color:var(--mut);font-weight:500}
   #q{width:100%;padding:14px;font-size:17px;border:2px solid var(--acc);border-radius:12px}
@@ -529,9 +532,16 @@ function doSearch(code){
     list.sort((a,b)=>NAMES[a].localeCompare(NAMES[b],"pl"));
   }
   if(!list.length){ box.innerHTML='<li>Nic nie znaleziono.</li>'; return; }
-  box.innerHTML=list.slice(0,40).map(k=>`<li><b>${esc(NAMES[k]||"Nieznany towar")}</b><span class="hint">${esc(k)}</span><div class="where${MIEJSCA[k]?"":" none"}">${MIEJSCA[k]?"📍 "+esc(MIEJSCA[k]):"Brak przypisanego miejsca"}</div>${USTAWIL[k]?`<span class="hint">ustawił(a): ${esc(USTAWIL[k])}</span>`:""}</li>`).join("");
+  box.innerHTML=list.slice(0,40).map(k=>`<li class="pick" data-k="${esc(k)}"><span class="go">Wydaj ›</span><b>${esc(NAMES[k]||"Nieznany towar")}</b><span class="hint">${esc(k)}</span><div class="where${MIEJSCA[k]?"":" none"}">${MIEJSCA[k]?"📍 "+esc(MIEJSCA[k]):"Brak przypisanego miejsca"}</div>${USTAWIL[k]?`<span class="hint">ustawił(a): ${esc(USTAWIL[k])}</span>`:""}</li>`).join("");
 }
 $("q").addEventListener("input",()=>doSearch());
+$("res").addEventListener("click",e=>{
+  const li=e.target.closest("li.pick"); if(!li) return;
+  const k=li.dataset.k; if(!NAMES[k]){ say("Najpierw nadaj temu kodowi nazwę.", "err"); return; }
+  st=empty(); undo=[]; st.co=k; st.ile="1";
+  setMode("ekran"); render("co"); window.scrollTo({top:0,behavior:"smooth"});
+  say("✓ "+NAMES[k]+" — "+P(nextStep()), "ok"); buzz(true);
+});
 // ---------- wyszukiwanie głosem ----------
 (function(){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
