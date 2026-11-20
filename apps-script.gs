@@ -46,6 +46,7 @@ function doPost(e) {
   try {
     const r = JSON.parse(e.postData.contents);
     if (r.typ === 'anuluj') return json_(anuluj_(String(r.id)));
+    if (r.typ === 'miejsce') return json_(zapiszMiejsce_(String(r.kod).trim(), String(r.miejsce || '').trim()));
     if (r.typ === 'towar') return json_(zapiszTowar_(String(r.kod).trim(), String(r.nazwa).trim()));
     const s = wydania_();
     const last = s.getLastRow();
@@ -79,6 +80,24 @@ function anuluj_(id) {
   return { ok: true, notFound: true };
 }
 
+function towary_() {
+  const t = sheet_(TOWARY, ['Kod kreskowy', 'Nazwa', 'Miejsce'], 1);
+  if (t.getRange(1, 3).getValue() === '') t.getRange(1, 3).setValue('Miejsce');
+  return t;
+}
+
+function zapiszMiejsce_(kod, miejsce) {
+  const t = towary_();
+  const last = t.getLastRow();
+  if (last > 1) {
+    const kody = t.getRange(2, 1, last - 1, 1).getValues().flat().map(function (k) { return String(k).trim(); });
+    const i = kody.indexOf(kod);
+    if (i !== -1) { t.getRange(i + 2, 3).setValue(miejsce); return { ok: true }; }
+  }
+  t.appendRow([kod, '', miejsce]);
+  return { ok: true, added: true };
+}
+
 function zapiszTowar_(kod, nazwa) {
   const t = sheet_(TOWARY, ['Kod kreskowy', 'Nazwa'], 1);
   const last = t.getLastRow();
@@ -104,11 +123,14 @@ function doGet(e) {
       };
     });
   }
-  const t = sheet_(TOWARY, ['Kod kreskowy', 'Nazwa'], 1);
-  const towary = {};
+  const t = towary_();
+  const towary = {}, miejsca = {};
   if (t.getLastRow() > 1) {
-    t.getRange(2, 1, t.getLastRow() - 1, 2).getValues().forEach(function (v) {
-      if (v[0] !== '') towary[String(v[0]).trim()] = String(v[1]);
+    t.getRange(2, 1, t.getLastRow() - 1, 3).getValues().forEach(function (v) {
+      if (v[0] === '') return;
+      const k = String(v[0]).trim();
+      if (String(v[1]) !== '') towary[k] = String(v[1]);
+      if (String(v[2]) !== '') miejsca[k] = String(v[2]);
     });
   }
   const os = osoby_();
@@ -118,7 +140,7 @@ function doGet(e) {
       if (String(v[0]).trim() !== '') osoby.push({ imie: String(v[0]).trim(), zdjecie: String(v[1]).trim() });
     });
   }
-  return json_({ wpisy: wpisy, towary: towary, osoby: osoby });
+  return json_({ wpisy: wpisy, towary: towary, miejsca: miejsca, osoby: osoby });
 }
 
 function json_(o) {
