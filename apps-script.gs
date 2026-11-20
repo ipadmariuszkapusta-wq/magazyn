@@ -46,7 +46,7 @@ function doPost(e) {
   try {
     const r = JSON.parse(e.postData.contents);
     if (r.typ === 'anuluj') return json_(anuluj_(String(r.id)));
-    if (r.typ === 'miejsce') return json_(zapiszMiejsce_(String(r.kod).trim(), String(r.miejsce || '').trim()));
+    if (r.typ === 'miejsce') return json_(zapiszMiejsce_(String(r.kod).trim(), String(r.miejsce || '').trim(), String(r.kto || ''), r.t ? new Date(r.t) : new Date()));
     if (r.typ === 'towar') return json_(zapiszTowar_(String(r.kod).trim(), String(r.nazwa).trim()));
     const s = wydania_();
     const last = s.getLastRow();
@@ -81,20 +81,21 @@ function anuluj_(id) {
 }
 
 function towary_() {
-  const t = sheet_(TOWARY, ['Kod kreskowy', 'Nazwa', 'Miejsce'], 1);
-  if (t.getRange(1, 3).getValue() === '') t.getRange(1, 3).setValue('Miejsce');
+  const t = sheet_(TOWARY, ['Kod kreskowy', 'Nazwa', 'Miejsce', 'Ustawił(a)', 'Kiedy'], 1);
+  if (t.getRange(1, 3).getValue() === '') t.getRange(1, 3, 1, 3).setValues([['Miejsce', 'Ustawił(a)', 'Kiedy']]);
+  if (t.getRange(1, 4).getValue() === '') t.getRange(1, 4, 1, 2).setValues([['Ustawił(a)', 'Kiedy']]);
   return t;
 }
 
-function zapiszMiejsce_(kod, miejsce) {
+function zapiszMiejsce_(kod, miejsce, kto, kiedy) {
   const t = towary_();
   const last = t.getLastRow();
   if (last > 1) {
     const kody = t.getRange(2, 1, last - 1, 1).getValues().flat().map(function (k) { return String(k).trim(); });
     const i = kody.indexOf(kod);
-    if (i !== -1) { t.getRange(i + 2, 3).setValue(miejsce); return { ok: true }; }
+    if (i !== -1) { t.getRange(i + 2, 3, 1, 3).setValues([[miejsce, kto, kiedy]]); return { ok: true }; }
   }
-  t.appendRow([kod, '', miejsce]);
+  t.appendRow([kod, '', miejsce, kto, kiedy]);
   return { ok: true, added: true };
 }
 
@@ -124,13 +125,14 @@ function doGet(e) {
     });
   }
   const t = towary_();
-  const towary = {}, miejsca = {};
+  const towary = {}, miejsca = {}, ustawil = {};
   if (t.getLastRow() > 1) {
-    t.getRange(2, 1, t.getLastRow() - 1, 3).getValues().forEach(function (v) {
+    t.getRange(2, 1, t.getLastRow() - 1, 5).getValues().forEach(function (v) {
       if (v[0] === '') return;
       const k = String(v[0]).trim();
       if (String(v[1]) !== '') towary[k] = String(v[1]);
       if (String(v[2]) !== '') miejsca[k] = String(v[2]);
+      if (String(v[3]) !== '') ustawil[k] = String(v[3]) + (v[4] ? ', ' + Utilities.formatDate(new Date(v[4]), 'Europe/Warsaw', 'dd.MM.yyyy, HH:mm') : '');
     });
   }
   const os = osoby_();
@@ -140,7 +142,7 @@ function doGet(e) {
       if (String(v[0]).trim() !== '') osoby.push({ imie: String(v[0]).trim(), zdjecie: String(v[1]).trim() });
     });
   }
-  return json_({ wpisy: wpisy, towary: towary, miejsca: miejsca, osoby: osoby });
+  return json_({ wpisy: wpisy, towary: towary, miejsca: miejsca, ustawil: ustawil, osoby: osoby });
 }
 
 function json_(o) {
