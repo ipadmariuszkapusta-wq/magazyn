@@ -205,7 +205,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="config.js?v=8"></script>
 <script>
-const APP_VERSION = "1795189845";
+const APP_VERSION = "1795203541";
 // automatyczne odświeżenie, gdy pojawi się nowa wersja aplikacji
 async function checkUpdate(){ try{ const v=(await fetch("version.txt?"+Date.now(),{cache:"no-store"}).then(r=>r.text())).trim(); if(v && v!==APP_VERSION && !st.co && !batch.length) location.reload(); }catch(e){} }
 setInterval(checkUpdate, 120000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkUpdate(); });
@@ -316,7 +316,7 @@ function photoUrl(u){
   const m=u.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?.*id=)([\w-]{20,})/);
   return m ? "https://drive.google.com/thumbnail?id="+m[1]+"&sz=w200" : u;
 }
-function initials(n){ return String(n).split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join(""); }
+function initials(n){ if(/^nieznan/i.test(String(n).trim())) return "?"; return String(n).split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join(""); }
 function drawPeople(){
   for(const id of ["people","locPeople"]) drawPeopleIn($(id));
   render(); drawLoc();
@@ -324,7 +324,7 @@ function drawPeople(){
 function drawPeopleIn(box){
   if(!OSOBY.length){ box.innerHTML='<div class="hint">Brak osób – dodaj je w arkuszu, zakładka „Osoby”.</div>'; return; }
   box.innerHTML = OSOBY.map((o,i)=>{
-    const u=photoUrl(o.zdjecie), col=COLORS[i%COLORS.length];
+    const u=photoUrl(o.zdjecie), col=/^nieznan/i.test(o.imie)?"#9ca3af":COLORS[i%COLORS.length];
     const av = u ? `<img class="av" src="${esc(u)}" alt="" data-col="${col}" data-ini="${esc(initials(o.imie))}">`
                  : `<div class="av" style="background:${col}">${esc(initials(o.imie))}</div>`;
     return `<button data-kto="${esc(o.imie)}">${av}<span>${esc(o.imie)}</span></button>`;
@@ -425,7 +425,7 @@ function adRender(){
   $("adLogin").hidden = !!adPass; $("adBody").hidden = !adPass;
   if(!adPass) return;
   $("adPeople").innerHTML = OSOBY.length ? OSOBY.map((o,i)=>{
-    const u=photoUrl(o.zdjecie), col=COLORS[i%COLORS.length];
+    const u=photoUrl(o.zdjecie), col=/^nieznan/i.test(o.imie)?"#9ca3af":COLORS[i%COLORS.length];
     const av = u ? `<img class="av" src="${esc(u)}" alt="">` : `<div class="av" style="background:${col}">${esc(initials(o.imie))}</div>`;
     return `<li>${av}<span class="grow">${esc(o.imie)}</span><button class="x" data-del="${esc(o.imie)}" title="Usuń">✕</button></li>`;
   }).join("") : '<li class="hint">Brak osób.</li>';
