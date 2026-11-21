@@ -189,7 +189,7 @@
   </div>
 
   <div id="reader"></div>
-  <button class="big" id="camBtn">📷 Włącz aparat</button>
+  <div class="row"><button class="big" id="camBtn" style="margin-top:0">📷 Włącz aparat</button><button class="sm" id="zoomBtn" hidden style="min-width:84px;font-weight:700">🔍 2x</button></div>
 
   <div class="row">
     <input id="kb" placeholder="Skaner / wpisz kod i Enter" autocomplete="off" enterkeyhint="send">
@@ -205,7 +205,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="config.js?v=8"></script>
 <script>
-const APP_VERSION = "1795246100";
+const APP_VERSION = "1795246913";
 // automatyczne odświeżenie, gdy pojawi się nowa wersja aplikacji
 async function checkUpdate(){ try{ const v=(await fetch("version.txt?"+Date.now(),{cache:"no-store"}).then(r=>r.text())).trim(); if(v && v!==APP_VERSION && !st.co && !batch.length) location.reload(); }catch(e){} }
 setInterval(checkUpdate, 120000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkUpdate(); });
@@ -282,7 +282,7 @@ function handle(raw){
     say(NAMES[code] ? (NAMES[code]+" → "+(MIEJSCA[code]||"brak przypisanego miejsca")) : "Tego kodu nie ma na liście towarów.", NAMES[code]?"ok":"err"); feedback(!!NAMES[code]); return;
   }
   if(code.startsWith("VM:MIEJSCE:")){ say("To kod półki – przełącz na „📍 Miejsca”, żeby przypisywać towary.", "err"); feedback(false); return; }
-  if(code.startsWith("VM:")){ say("Tu skanujesz tylko kod z opakowania – resztę wybierz na ekranie.", "err"); feedback(false); return; }
+  if(code.startsWith("VM:") && code!=="VM:OK" && code!=="VM:POPRAW"){ say("Tu skanujesz tylko kod z opakowania – resztę wybierz na ekranie.", "err"); feedback(false); return; }
   if(code === "VM:POPRAW"){
     if(!undo.length){ say("Nie ma czego cofać.", "err"); feedback(false); return; }
     st = undo.pop(); render(); say("Cofnięto ostatnie skanowanie. "+P(nextStep()), "ok"); feedback(true); return;
@@ -710,23 +710,41 @@ async function startCam(){
     formatsToSupport:[F.QR_CODE,F.EAN_13,F.EAN_8,F.UPC_A,F.UPC_E,F.CODE_128,F.CODE_39,F.ITF,F.DATA_MATRIX],
     experimentalFeatures:{useBarCodeDetectorIfSupported:true}, verbose:false });
   try{
-    await cam.start({facingMode:"environment"}, {fps:10, qrbox:(w,h)=>{const s=Math.floor(Math.min(w,h)*0.75);return {width:s,height:Math.floor(s*0.7)};}},
+    await cam.start({facingMode:"environment"}, {fps:15, qrbox:(w,h)=>({width:Math.floor(w*0.92),height:Math.floor(h*0.8)}),
+      videoConstraints:{facingMode:"environment", width:{ideal:1920}, height:{ideal:1080}, advanced:[{focusMode:"continuous"}]}},
       text=>{
         const now=Date.now();
         if(text===lastCode && now-lastTime<1800) return;   // ten sam kod – odczekaj
         lastCode=text; lastTime=now; handle(text);
       }, ()=>{});
     camOn = true; $("camBtn").textContent="⏹ Wyłącz aparat"; $("camBtn").classList.add("stop");
+    setupZoom();
     if(nextStep()==="co") say("Zeskanuj kod kreskowy towaru.");
   }catch(e){
     say("Brak dostępu do aparatu. Zezwól na aparat w przeglądarce (ikona kłódki przy adresie).", "err");
   }
 }
+// przybliżenie – małe etykiety czyta się dużo łatwiej z 2x
+let zoomLevels=[], zoomIdx=0;
+function setupZoom(){
+  zoomLevels=[]; $("zoomBtn").hidden=true;
+  try{
+    const cap=cam.getRunningTrackCapabilities && cam.getRunningTrackCapabilities();
+    if(cap && cap.zoom && cap.zoom.max>1){
+      const mx=Math.min(cap.zoom.max,4); zoomLevels=[cap.zoom.min||1]; for(const z of [2,3,4]) if(z<=mx) zoomLevels.push(z);
+      zoomIdx = zoomLevels.length>1 ? 1 : 0; applyZoom(); $("zoomBtn").hidden=false;
+    }
+  }catch(e){}
+}
+function applyZoom(){
+  try{ cam.applyVideoConstraints({advanced:[{zoom:zoomLevels[zoomIdx]}]}); $("zoomBtn").textContent="🔍 "+zoomLevels[zoomIdx]+"x"; }catch(e){}
+}
 async function stopCam(){
   try{ await cam.stop(); }catch(e){}
-  camOn=false; $("camBtn").textContent="📷 Włącz aparat"; $("camBtn").classList.remove("stop");
+  camOn=false; $("camBtn").textContent="📷 Włącz aparat"; $("camBtn").classList.remove("stop"); $("zoomBtn").hidden=true;
 }
 $("camBtn").onclick = ()=> camOn ? stopCam() : startCam();
+$("zoomBtn").onclick = ()=>{ if(!zoomLevels.length) return; zoomIdx=(zoomIdx+1)%zoomLevels.length; applyZoom(); };
 document.addEventListener("visibilitychange", ()=>{ if(document.hidden && camOn) stopCam(); });
 
 // ---------- start ----------
