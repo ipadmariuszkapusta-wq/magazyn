@@ -205,7 +205,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="config.js?v=8"></script>
 <script>
-const APP_VERSION = "1795203541";
+const APP_VERSION = "1795246100";
 // automatyczne odświeżenie, gdy pojawi się nowa wersja aplikacji
 async function checkUpdate(){ try{ const v=(await fetch("version.txt?"+Date.now(),{cache:"no-store"}).then(r=>r.text())).trim(); if(v && v!==APP_VERSION && !st.co && !batch.length) location.reload(); }catch(e){} }
 setInterval(checkUpdate, 120000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkUpdate(); });
@@ -360,7 +360,11 @@ $("m-admin").onclick=()=>{ setMode("admin"); adRender(); say(adPass ? "Panel adm
 
 // ---------- miejsca (szafa / półka) ----------
 let curLoc = "", locKto = LS.get("vm_lockto", ""), pendingAssign = "", batch = [];
-function locLabel(code){ const m=code.match(/^VM:MIEJSCE:S(\d+)-P(\d+)$/i); return m ? `Szafa ${+m[1]}, półka ${+m[2]}` : ""; }
+function locLabel(code){
+  let m=code.match(/^VM:MIEJSCE:S(\d+)-P(\d+)$/i); if(m) return `Szafa ${+m[1]}, półka ${+m[2]}`;
+  m=code.match(/^VM:MIEJSCE:S(\d+)-G$/i); if(m) return `Szafa ${+m[1]}, na szafie`;
+  return "";
+}
 function locPrompt(){
   if(!locKto) return "Wybierz, kto rozkłada towar.";
   if(!curLoc) return "Zeskanuj kod QR półki.";
