@@ -86,6 +86,10 @@
   .modes button{padding:10px 2px;font-size:13px;white-space:nowrap}
   .srow{display:flex;gap:8px}
   .srow #q{flex:1;width:auto}
+  #isMic{width:56px;border:2px solid var(--acc);background:#fff;border-radius:12px;font-size:24px;cursor:pointer}
+  #isMic.rec{background:#fee2e2;border-color:var(--err)}
+  .srow #isQ{flex:1;width:auto}
+  #isBox{margin-top:10px}
   #mic{width:56px;border:2px solid var(--acc);background:#fff;border-radius:12px;font-size:24px;cursor:pointer}
   #mic.rec{background:#fee2e2;border-color:var(--err);animation:pulse 1s infinite}
   @keyframes pulse{50%{opacity:.5}}
@@ -196,6 +200,12 @@
 
   <div class="msg" id="msg">Włącz aparat i zeskanuj kod kreskowy towaru.</div>
 
+  <div id="isBox" hidden>
+    <div class="tl">Nie skanuje? Wyszukaj towar</div>
+    <div class="srow"><input id="isQ" placeholder="Wpisz nazwę, np. rękawiczki" autocomplete="off"><button id="isMic" title="Powiedz">🎤</button></div>
+    <ul class="res" id="isRes"></ul>
+  </div>
+
   <div id="touch" hidden>
     <div class="tl">Jednostka</div>
     <div class="seg"><button data-j="opakowanie">📦 Opakowanie</button><button data-j="sztuki">🔹 Sztuki</button></div>
@@ -224,7 +234,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="config.js?v=8"></script>
 <script>
-const APP_VERSION = "1795376894";
+const APP_VERSION = "1795377062";
 // automatyczne odświeżenie, gdy pojawi się nowa wersja aplikacji
 async function checkUpdate(){ try{ const v=(await fetch("version.txt?"+Date.now(),{cache:"no-store"}).then(r=>r.text())).trim(); if(v && v!==APP_VERSION && !st.co && !batch.length) location.reload(); }catch(e){} }
 setInterval(checkUpdate, 120000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkUpdate(); });
@@ -389,7 +399,7 @@ function pendingKody(){ const o={}; queue.filter(q=>q.typ==="kod").forEach(q=>o[
 // przypisanie nieznanego kodu do produktu
 let linkCb=null, linkKey="", linkJ="opakowanie";
 function openLink(p, cb){
-  linkKey=p.key; linkCb=cb; $("linkQ").value=""; $("linkRes").innerHTML=""; $("linkbox").hidden=false; $("namebox").hidden=true;
+  linkKey=p.key; linkCb=cb; $("isBox").hidden=true; $("linkQ").value=""; $("linkRes").innerHTML=""; $("linkbox").hidden=false; $("namebox").hidden=true;
   linkJ="opakowanie"; for(const b of $("linkJ").querySelectorAll("button")) b.classList.toggle("on", b.dataset.j===linkJ);
   setTimeout(()=>$("linkQ").focus(),50);
   say("Nieznany kod "+p.key+(p.waznosc?" (ważne do "+p.waznosc+")":"")+" – wyszukaj produkt poniżej.", "err"); feedback(false);
@@ -442,6 +452,8 @@ function renderTouch(){
   $("locPanel").hidden = mode!=="miejsca"; $("searchPanel").hidden = mode!=="szukaj"; $("adminPanel").hidden = mode!=="admin";
   if(!issue && !renaming && !pendingAssign) $("namebox").hidden = true;
   if(mode!=="ekran" && mode!=="miejsca" && !$("linkbox").hidden) closeLink();
+  const isShow = mode==="ekran" && !st.co && $("linkbox").hidden;
+  if($("isBox").hidden===isShow){ $("isBox").hidden=!isShow; if(!isShow){ $("isQ").value=""; $("isRes").innerHTML=""; } }
   const show = mode==="ekran" && !!st.co && !!NAMES[st.co];
   $("touch").hidden = !show;
   if(!show) return;
@@ -659,6 +671,36 @@ $("res").addEventListener("click",e=>{
   setMode("ekran"); render("co"); window.scrollTo({top:0,behavior:"smooth"});
   say("✓ "+NAMES[k]+" — "+P(nextStep()), "ok"); buzz(true);
 });
+// ---------- wyszukiwarka na ekranie wydania ----------
+function isSearch(){
+  const q=fold($("isQ").value).trim(), box=$("isRes");
+  if(q.length<2){ box.innerHTML=""; return; }
+  const words=q.split(/\s+/);
+  const list=Object.keys(NAMES).filter(k=>{ const t=fold(NAMES[k]+" "+k); return words.every(w=>t.includes(w) || (w.length>=5 && t.includes(w.slice(0,w.length-2)))); }).sort((a,b)=>NAMES[a].localeCompare(NAMES[b],"pl"));
+  box.innerHTML = list.length ? list.slice(0,15).map(k=>`<li class="pick" data-k="${esc(k)}"><span class="go">Wydaj ›</span><b>${esc(NAMES[k])}</b><span class="hint">${esc(k)}${MIEJSCA[k]?" · 📍 "+esc(MIEJSCA[k]):""}</span></li>`).join("") : "<li>Nic nie znaleziono.</li>";
+}
+$("isQ").addEventListener("input", isSearch);
+$("isRes").addEventListener("click",e=>{
+  const li=e.target.closest("li.pick"); if(!li) return;
+  const k=li.dataset.k; $("isQ").blur();
+  undo.push({...st}); st.co=k; st.ile=st.ile||"1"; renaming=false;
+  render("co"); say("✓ "+NAMES[k]+" — "+P(nextStep()), "ok"); buzz(true);
+  $("s-co").scrollIntoView({behavior:"smooth", block:"start"});
+});
+(function(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ $("isMic").hidden = true; return; }
+  let rec=null;
+  $("isMic").onclick=()=>{
+    if(rec){ rec.stop(); return; }
+    rec=new SR(); rec.lang="pl-PL"; rec.interimResults=true;
+    $("isMic").classList.add("rec"); say("Słucham… powiedz nazwę towaru.");
+    rec.onresult=e=>{ $("isQ").value=Array.from(e.results).map(r=>r[0].transcript).join(" ").replace(/[.,!?]$/,""); isSearch(); };
+    rec.onerror=e=>{ say(e.error==="not-allowed" ? "Brak zgody na mikrofon – zezwól w przeglądarce." : "Nie usłyszałem – spróbuj jeszcze raz.", "err"); };
+    rec.onend=()=>{ $("isMic").classList.remove("rec"); rec=null; };
+    try{ rec.start(); }catch(e){ $("isMic").classList.remove("rec"); rec=null; }
+  };
+})();
 // ---------- wyszukiwanie głosem ----------
 (function(){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
