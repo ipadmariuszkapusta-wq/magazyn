@@ -192,7 +192,6 @@
 
   <div class="namebox" id="linkbox" hidden>
     <div class="nb-t">Nowy kod z opakowania. Wyszukaj, jaki to produkt – zapamiętam ten kod dla wszystkich.</div>
-    <div class="lseg" id="linkJ"><button data-j="opakowanie" class="on">📦 kod z opakowania</button><button data-j="sztuki">🔹 kod ze sztuki</button></div>
     <div class="row"><input id="linkQ" placeholder="Wpisz nazwę, np. scotchbond" autocomplete="off"></div>
     <ul class="res" id="linkRes"></ul>
     <div class="row"><button id="linkNew" style="background:#fff;color:#b45309;border:2px solid #f59e0b">To całkiem nowy produkt – wpiszę nazwę</button> <button id="linkCancel" style="background:#fff;color:#555;border:2px solid #ddd">Anuluj</button></div>
@@ -234,7 +233,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="config.js?v=8"></script>
 <script>
-const APP_VERSION = "1795377309";
+const APP_VERSION = "1795377519";
 // automatyczne odświeżenie, gdy pojawi się nowa wersja aplikacji
 async function checkUpdate(){ try{ const v=(await fetch("version.txt?"+Date.now(),{cache:"no-store"}).then(r=>r.text())).trim(); if(v && v!==APP_VERSION && !st.co && !batch.length) location.reload(); }catch(e){} }
 setInterval(checkUpdate, 120000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkUpdate(); });
@@ -339,7 +338,7 @@ function handle(raw){
     const p = resolve(code);
     const take = (k, j, newKey)=>{
       const prev2 = {...st};
-      st.co = k || newKey; st.partia = p.partia; st.waznosc = p.waznosc; if(j) st.jedn = j;
+      st.co = k || newKey; st.partia = p.partia; st.waznosc = p.waznosc; st.jedn = "";
       renaming = false; if(mode==="ekran"){ st.ile = st.ile || "1"; }
       undo.push(prev2); if(undo.length>30) undo.shift();
       render("co"); say("✓ "+(k ? describe(k) : "nowy produkt")+(p.waznosc?" · ważne do "+p.waznosc:"")+" — "+P(nextStep()), "ok"); if(k) feedback(true);
@@ -398,15 +397,13 @@ function resolve(raw){
 }
 function pendingKody(){ const o={}; queue.filter(q=>q.typ==="kod").forEach(q=>o[q.kod]={p:q.produkt,j:q.jednostka}); return o; }
 // przypisanie nieznanego kodu do produktu
-let linkCb=null, linkKey="", linkJ="opakowanie";
+let linkCb=null, linkKey="", linkJ="";
 function openLink(p, cb){
   linkKey=p.key; linkCb=cb; $("isBox").hidden=true; $("linkQ").value=""; $("linkRes").innerHTML=""; $("linkbox").hidden=false; $("namebox").hidden=true;
-  linkJ="opakowanie"; for(const b of $("linkJ").querySelectorAll("button")) b.classList.toggle("on", b.dataset.j===linkJ);
   setTimeout(()=>$("linkQ").focus(),50);
   say("Nieznany kod "+p.key+(p.waznosc?" (ważne do "+p.waznosc+")":"")+" – wyszukaj produkt poniżej.", "err"); feedback(false);
 }
 function closeLink(){ $("linkbox").hidden=true; linkCb=null; linkKey=""; }
-$("linkJ").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return; linkJ=b.dataset.j; for(const x of $("linkJ").querySelectorAll("button")) x.classList.toggle("on", x===b); });
 $("linkQ").addEventListener("input",()=>{
   const q=fold($("linkQ").value).trim(), box=$("linkRes");
   if(q.length<2){ box.innerHTML=""; return; }
@@ -685,7 +682,7 @@ $("isQ").addEventListener("input", isSearch);
 $("isRes").addEventListener("click",e=>{
   const li=e.target.closest("li.pick"); if(!li) return;
   const k=li.dataset.k; $("isQ").blur();
-  undo.push({...st}); st.co=k; st.ile=st.ile||"1"; renaming=false;
+  undo.push({...st}); st.co=k; st.jedn=""; st.ile=st.ile||"1"; renaming=false;
   render("co"); say("✓ "+NAMES[k]+" — "+P(nextStep()), "ok"); buzz(true);
   $("s-co").scrollIntoView({behavior:"smooth", block:"start"});
 });
