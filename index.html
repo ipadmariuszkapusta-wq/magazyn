@@ -98,6 +98,10 @@
   .res .where{margin-top:4px;font-weight:700;color:var(--acc)}
   .res .where.none{color:var(--mut);font-weight:500}
   #q{width:100%;padding:14px;font-size:17px;border:2px solid var(--acc);border-radius:12px}
+  .lseg{display:flex;gap:8px;margin-top:8px}
+  .lseg button{flex:1;padding:10px 6px;font-size:14px;font-weight:700;border:2px solid var(--line);background:#fff;border-radius:10px;cursor:pointer}
+  .lseg button.on{border-color:#f59e0b;background:#fef3c7}
+  .cexp{font-size:13px;color:#b45309;font-weight:700;margin-top:3px}
   .cloc{font-size:13px;color:var(--acc);font-weight:700;margin-top:3px}
   .flash{animation:fl .35s}
   @keyframes fl{0%{background:#bbf7d0}100%{background:var(--card)}}
@@ -175,6 +179,14 @@
     <div class="row"><input id="nameIn" placeholder="np. Rękawiczki nitrylowe M" autocomplete="off" enterkeyhint="done"><button id="nameOk">Zapisz</button></div>
   </div>
 
+  <div class="namebox" id="linkbox" hidden>
+    <div class="nb-t">Nowy kod z opakowania. Wyszukaj, jaki to produkt – zapamiętam ten kod dla wszystkich.</div>
+    <div class="lseg" id="linkJ"><button data-j="opakowanie" class="on">📦 kod z opakowania</button><button data-j="sztuki">🔹 kod ze sztuki</button></div>
+    <div class="row"><input id="linkQ" placeholder="Wpisz nazwę, np. scotchbond" autocomplete="off"></div>
+    <ul class="res" id="linkRes"></ul>
+    <div class="row"><button id="linkNew" style="background:#fff;color:#b45309;border:2px solid #f59e0b">To całkiem nowy produkt – wpiszę nazwę</button> <button id="linkCancel" style="background:#fff;color:#555;border:2px solid #ddd">Anuluj</button></div>
+  </div>
+
   <div class="msg" id="msg">Włącz aparat i zeskanuj kod kreskowy towaru.</div>
 
   <div id="touch" hidden>
@@ -205,13 +217,13 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="config.js?v=8"></script>
 <script>
-const APP_VERSION = "1795246913";
+const APP_VERSION = "1795376165";
 // automatyczne odświeżenie, gdy pojawi się nowa wersja aplikacji
 async function checkUpdate(){ try{ const v=(await fetch("version.txt?"+Date.now(),{cache:"no-store"}).then(r=>r.text())).trim(); if(v && v!==APP_VERSION && !st.co && !batch.length) location.reload(); }catch(e){} }
 setInterval(checkUpdate, 120000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkUpdate(); });
 const API = (window.VM_API || "").trim();          // adres Google Apps Script (config.js)
 const $ = id => document.getElementById(id);
-const empty = () => ({co:"", jedn:"", ile:"", kto:""});
+const empty = () => ({co:"", jedn:"", ile:"", kto:"", partia:"", waznosc:""});
 let st = empty(), undo = [], rows = [], NAMES = {};
 
 const LS = {
@@ -245,7 +257,7 @@ const PROMPT = {co:"Zeskanuj kod kreskowy towaru.", nazwa:"Nowy towar – wpisz 
 function render(changed){
   const known = st.co && NAMES[st.co];
   $("v-co").textContent = !st.co ? "—" : (known ? NAMES[st.co] : "❓ nieznany towar");
-  $("c-co").innerHTML = st.co ? "kod: " + esc(st.co) + (MIEJSCA[st.co] ? '<div class="cloc">📍 ' + esc(MIEJSCA[st.co]) + '</div>' : "") : "";
+  $("c-co").innerHTML = st.co ? "kod: " + esc(st.co) + (MIEJSCA[st.co] ? '<div class="cloc">📍 ' + esc(MIEJSCA[st.co]) + '</div>' : "") + (st.waznosc ? '<div class="cexp">⏳ ważne do ' + esc(st.waznosc) + (st.partia ? ' · partia ' + esc(st.partia) : '') + '</div>' : "") : "";
   $("rename").hidden = !known;
   const nb = $("namebox"), showNb = !!st.co && !known;
   if(showNb && nb.hidden){ $("nameIn").value = ""; nb.hidden = false; setTimeout(()=>$("nameIn").focus(), 50); }
@@ -278,8 +290,9 @@ function handle(raw){
   }
   if(mode==="szukaj"){
     if(code.startsWith("VM:")){ say("W wyszukiwarce skanuj kod z opakowania.", "err"); feedback(false); return; }
-    $("q").value=""; doSearch(code);
-    say(NAMES[code] ? (NAMES[code]+" → "+(MIEJSCA[code]||"brak przypisanego miejsca")) : "Tego kodu nie ma na liście towarów.", NAMES[code]?"ok":"err"); feedback(!!NAMES[code]); return;
+    const k=resolve(code).co||code;
+    $("q").value=""; doSearch(k);
+    say(NAMES[k] ? (NAMES[k]+" → "+(MIEJSCA[k]||"brak przypisanego miejsca")) : "Tego kodu jeszcze nie ma – zeskanuj go w „Wydaj”, żeby przypisać do produktu.", NAMES[k]?"ok":"err"); feedback(!!NAMES[k]); return;
   }
   if(code.startsWith("VM:MIEJSCE:")){ say("To kod półki – przełącz na „📍 Miejsca”, żeby przypisywać towary.", "err"); feedback(false); return; }
   if(code.startsWith("VM:") && code!=="VM:OK" && code!=="VM:POPRAW"){ say("Tu skanujesz tylko kod z opakowania – resztę wybierz na ekranie.", "err"); feedback(false); return; }
@@ -292,7 +305,7 @@ function handle(raw){
     if(n !== "ok"){ say("Brakuje danych. "+P(n), "err"); feedback(false); if(n==="nazwa") $("nameIn").focus(); return; }
     const ile = parseInt(st.ile,10);
     if(!ile){ say("Ilość nie może być 0. Zeskanuj POPRAW i ilość jeszcze raz.", "err"); feedback(false); return; }
-    save({co:st.co, nazwa:NAMES[st.co], jednostka:st.jedn, ile, kto:st.kto}); return;
+    save({co:st.co, nazwa:NAMES[st.co], jednostka:st.jedn, ile, kto:st.kto, partia:st.partia||"", waznosc:st.waznosc||""}); return;
   }
   const prev = {...st}; let changed;
   if(code === "VM:OPAK"){ st.jedn = "opakowanie"; changed="jedn"; }
@@ -304,10 +317,94 @@ function handle(raw){
   }
   else if(code.startsWith("VM:KTO:")){ st.kto = code.slice(7).trim(); changed="kto"; }
   else if(code.startsWith("VM:")){ say("Nieznany kod: "+code, "err"); feedback(false); return; }
-  else { st.co = code; changed="co"; renaming = false; if(mode==="ekran"){ st.ile = st.ile || "1"; } }
+  else {
+    const p = resolve(code);
+    const take = (k, j, newKey)=>{
+      const prev2 = {...st};
+      st.co = k || newKey; st.partia = p.partia; st.waznosc = p.waznosc; if(j) st.jedn = j;
+      renaming = false; if(mode==="ekran"){ st.ile = st.ile || "1"; }
+      undo.push(prev2); if(undo.length>30) undo.shift();
+      render("co"); say("✓ "+(k ? describe(k) : "nowy produkt")+(p.waznosc?" · ważne do "+p.waznosc:"")+" — "+P(nextStep()), "ok"); if(k) feedback(true);
+    };
+    if(p.co){ take(p.co, p.j); return; }
+    if(mode==="ekran" && Object.keys(NAMES).length){ openLink(p, take); return; }
+    take(null, "", p.key); return;
+  }
   undo.push(prev); if(undo.length>30) undo.shift();
   render(changed); say("✓ "+describe(code)+" — "+P(nextStep()), "ok"); feedback(true);
 }
+
+// ---------- kody z opakowań (GS1: EAN / DataMatrix) ----------
+function gs1Date(s){
+  const y=2000+ +s.slice(0,2), m=+s.slice(2,4); let d=+s.slice(4,6);
+  if(!m || m>12) return "";
+  if(!d) d=new Date(y,m,0).getDate();           // 00 = ostatni dzień miesiąca
+  return y+"-"+String(m).padStart(2,"0")+"-"+String(d).padStart(2,"0");
+}
+function parseScan(raw){
+  let s=String(raw||"").trim().replace(/^\][A-Za-z]\d/,"").replace(/^\x1d+/,"");
+  const out={raw:String(raw||"").trim(), key:"", gtin:"", partia:"", waznosc:""};
+  const FIX={"00":18,"01":14,"02":14,"11":6,"12":6,"13":6,"15":6,"16":6,"17":6,"20":2};
+  let f=null;
+  if(/^\(\d{2,4}\)/.test(s)){                      // zapis z nawiasami: (01)...(17)...(10)...
+    f={}; s.replace(/\((\d{2,4})\)([^(]*)/g,(_,a,v)=>{ f[a]=v.trim(); });
+  } else if(/^01\d{14}/.test(s) && s.length>16){   // ciąg GS1 (DataMatrix / GS1-128)
+    f={}; let i=0;
+    while(i<s.length){
+      if(s[i]==="\x1d"){ i++; continue; }
+      const a=s.slice(i,i+2);
+      if(FIX[a]){ f[a]=s.slice(i+2,i+2+FIX[a]); i+=2+FIX[a]; continue; }
+      let ai=a, st=i+2;
+      if(!/^(10|21|22|30|37|90|91|92|93|94|95|96|97|98|99)$/.test(a)){ ai=s.slice(i,i+3); st=i+3; if(!/^\d{3}$/.test(ai)){ break; } if(/^(240|241|250|251|400|401|403|410|411|412|413|414|420|421|422|7\d\d)$/.test(ai)===false){ ai=s.slice(i,i+4); st=i+4; } }
+      let e=s.indexOf("\x1d",st);
+      if(e===-1){ // brak separatora – spróbuj odciąć daty z końca (np. ...10LOT17270531)
+        e=s.length;
+        for(let j=st+1;j<s.length;j++) if(/^(1[1357]\d{6})+$/.test(s.slice(j))){ e=j; break; }
+      }
+      f[ai]=s.slice(st,e); i=e;
+    }
+  }
+  if(f && f["01"]){
+    out.gtin=out.key=f["01"]; out.partia=f["10"]||""; out.waznosc=f["17"]?gs1Date(f["17"]):"";
+    return out;
+  }
+  if(/^\d{8}$|^\d{12,14}$/.test(s)){ out.gtin=out.key=s.padStart(14,"0"); return out; }
+  out.key=s; return out;
+}
+let KODY = LS.get("vm_kody", {});   // kod z opakowania -> {p: nasz kod, j: jednostka}
+function resolve(raw){
+  const p=parseScan(raw);
+  for(const c of [p.raw,p.key]) if(c && NAMES[c]) return Object.assign(p,{co:c});
+  for(const c of [p.raw,p.key]) if(c && KODY[c] && KODY[c].p) return Object.assign(p,{co:KODY[c].p, j:KODY[c].j||""});
+  return Object.assign(p,{co:""});
+}
+function pendingKody(){ const o={}; queue.filter(q=>q.typ==="kod").forEach(q=>o[q.kod]={p:q.produkt,j:q.jednostka}); return o; }
+// przypisanie nieznanego kodu do produktu
+let linkCb=null, linkKey="", linkJ="opakowanie";
+function openLink(p, cb){
+  linkKey=p.key; linkCb=cb; $("linkQ").value=""; $("linkRes").innerHTML=""; $("linkbox").hidden=false; $("namebox").hidden=true;
+  linkJ="opakowanie"; for(const b of $("linkJ").querySelectorAll("button")) b.classList.toggle("on", b.dataset.j===linkJ);
+  setTimeout(()=>$("linkQ").focus(),50);
+  say("Nieznany kod "+p.key+(p.waznosc?" (ważne do "+p.waznosc+")":"")+" – wyszukaj produkt poniżej.", "err"); feedback(false);
+}
+function closeLink(){ $("linkbox").hidden=true; linkCb=null; linkKey=""; }
+$("linkJ").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return; linkJ=b.dataset.j; for(const x of $("linkJ").querySelectorAll("button")) x.classList.toggle("on", x===b); });
+$("linkQ").addEventListener("input",()=>{
+  const q=fold($("linkQ").value).trim(), box=$("linkRes");
+  if(q.length<2){ box.innerHTML=""; return; }
+  const words=q.split(/\s+/);
+  const list=Object.keys(NAMES).filter(k=>{ const t=fold(NAMES[k]+" "+k); return words.every(w=>t.includes(w) || (w.length>=5 && t.includes(w.slice(0,w.length-2)))); }).sort((a,b)=>NAMES[a].localeCompare(NAMES[b],"pl"));
+  box.innerHTML = list.length ? list.slice(0,15).map(k=>`<li class="pick" data-k="${esc(k)}"><span class="go">To ten ›</span><b>${esc(NAMES[k])}</b><span class="hint">${esc(k)}</span></li>`).join("") : "<li>Nic nie znaleziono.</li>";
+});
+$("linkRes").addEventListener("click",e=>{
+  const li=e.target.closest("li.pick"); if(!li || !linkCb) return;
+  const k=li.dataset.k, cb=linkCb;
+  KODY[linkKey]={p:k,j:linkJ}; LS.set("vm_kody", KODY);
+  queue.push({typ:"kod", kod:linkKey, produkt:k, jednostka:linkJ, kto:st.kto||locKto||"", id:"k"+Date.now().toString(36)}); LS.set("vm_queue", queue);
+  closeLink(); flush(); cb(k, linkJ);
+});
+$("linkNew").onclick=()=>{ const cb=linkCb; if(!cb) return; const key=linkKey; closeLink(); cb(null, "", key); };
+$("linkCancel").onclick=()=>{ closeLink(); st=empty(); undo=[]; render(); say("Anulowano. "+P("co")); };
 
 // ---------- tryb ekranowy ----------
 const COLORS=["#2563eb","#16a34a","#db2777","#ea580c","#7c3aed","#0891b2","#ca8a04","#dc2626"];
@@ -337,6 +434,7 @@ function renderTouch(){
   $("steps").hidden = !issue; $("hist").hidden = !issue;
   $("locPanel").hidden = mode!=="miejsca"; $("searchPanel").hidden = mode!=="szukaj"; $("adminPanel").hidden = mode!=="admin";
   if(!issue && !renaming && !pendingAssign) $("namebox").hidden = true;
+  if(mode!=="ekran" && mode!=="miejsca" && !$("linkbox").hidden) closeLink();
   const show = mode==="ekran" && !!st.co && !!NAMES[st.co];
   $("touch").hidden = !show;
   if(!show) return;
@@ -391,6 +489,10 @@ function handleLoc(code){
   if(code.startsWith("VM:")){ say("To nie jest kod półki ani towaru.", "err"); feedback(false); return; }
   if(!locKto){ say("Najpierw wybierz, kto rozkłada.", "err"); feedback(false); return; }
   if(!curLoc){ say("Najpierw zeskanuj kod QR półki.", "err"); feedback(false); return; }
+  const rp=resolve(code);
+  if(rp.co){ addToBatch(rp.co); return; }
+  if(Object.keys(NAMES).length){ openLink(rp, (k, j, newKey)=>{ if(k){ addToBatch(k); return; } code=newKey; pendingAssign=code; st.co=code; renaming=false; $("nameIn").value=""; $("namebox").hidden=false; setTimeout(()=>$("nameIn").focus(),50); say("Nowy towar – wpisz nazwę i kliknij Zapisz.", "err"); }); return; }
+  code = rp.key;
   if(!NAMES[code]){
     pendingAssign = code; st.co = code; renaming = false;
     $("nameIn").value=""; $("namebox").hidden=false; setTimeout(()=>$("nameIn").focus(),50);
@@ -647,6 +749,7 @@ async function pull(){
     if(Array.isArray(j.osoby)){ const same=JSON.stringify(j.osoby)===JSON.stringify(OSOBY); OSOBY=j.osoby; LS.set("vm_osoby", OSOBY); if(!same){ drawPeople(); render(); } }
     if(j.ustawil){ USTAWIL = Object.assign({}, j.ustawil); LS.set("vm_ustawil", USTAWIL); }
     if(j.miejsca){ MIEJSCA = Object.assign({}, j.miejsca, pendingLocs()); LS.set("vm_miejsca", MIEJSCA); }
+    if(j.kody){ KODY = Object.assign({}, j.kody, pendingKody()); LS.set("vm_kody", KODY); }
     if(j.towary){ NAMES = Object.assign({}, j.towary, pendingNames()); LS.set("vm_names", NAMES); render(); }
     if(Array.isArray(j.wpisy)){
       const pend = queue.filter(q=>!q.typ);
