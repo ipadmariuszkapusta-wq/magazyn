@@ -234,13 +234,14 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="config.js?v=8"></script>
 <script>
-const APP_VERSION = "1795377062";
+const APP_VERSION = "1795377309";
 // automatyczne odświeżenie, gdy pojawi się nowa wersja aplikacji
 async function checkUpdate(){ try{ const v=(await fetch("version.txt?"+Date.now(),{cache:"no-store"}).then(r=>r.text())).trim(); if(v && v!==APP_VERSION && !st.co && !batch.length) location.reload(); }catch(e){} }
 setInterval(checkUpdate, 120000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkUpdate(); });
 const API = (window.VM_API || "").trim();          // adres Google Apps Script (config.js)
 const $ = id => document.getElementById(id);
-const empty = () => ({co:"", jedn:"", ile:"", kto:"", partia:"", waznosc:""});
+const me = () => { try{ return JSON.parse(localStorage.getItem("vm_me")) || ""; }catch(e){ return ""; } };   // osoba zapamiętana na tym telefonie
+const empty = () => ({co:"", jedn:"", ile:"", kto:me(), partia:"", waznosc:""});
 let st = empty(), undo = [], rows = [], NAMES = {};
 
 const LS = {
@@ -432,6 +433,7 @@ function photoUrl(u){
 }
 function initials(n){ if(/^nieznan/i.test(String(n).trim())) return "?"; return String(n).split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join(""); }
 function drawPeople(){
+  if(OSOBY.length && st.kto && !OSOBY.some(o=>o.imie===st.kto)){ st.kto=""; LS.set("vm_me",""); }
   for(const id of ["people","locPeople"]) drawPeopleIn($(id));
   render(); drawLoc();
 }
@@ -521,7 +523,7 @@ function handleLoc(code){
 }
 $("locPeople").addEventListener("click",e=>{
   const b=e.target.closest("button"); if(!b) return;
-  locKto=b.dataset.kto; LS.set("vm_lockto", locKto); drawLoc(); say("✓ "+locKto+" — "+locPrompt(), "ok"); buzz(true);
+  locKto=b.dataset.kto; LS.set("vm_lockto", locKto); if(!me()) LS.set("vm_me", locKto); drawLoc(); say("✓ "+locKto+" — "+locPrompt(), "ok"); buzz(true);
 });
 $("locList").addEventListener("click",e=>{
   const b=e.target.closest(".x"); if(!b) return;
@@ -729,7 +731,7 @@ $("cntIn").addEventListener("change",()=>setQty($("cntIn").value));
 $("cntIn").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); $("cntIn").blur(); setQty($("cntIn").value); }});
 $("people").addEventListener("click",e=>{
   const b=e.target.closest("button"); if(!b) return;
-  st.kto=b.dataset.kto; render("kto"); say("✓ "+st.kto+" — "+P(nextStep()),"ok"); buzz(true);
+  st.kto=b.dataset.kto; LS.set("vm_me", st.kto); render("kto"); say("✓ "+st.kto+" — "+P(nextStep()),"ok"); buzz(true);
 });
 $("confirmBtn").onclick=()=>{ if(document.activeElement===$("cntIn")) setQty($("cntIn").value); handle("VM:OK"); };
 $("cancelBtn").onclick=()=>{ st=empty(); undo=[]; render(); say("Anulowano. "+P("co")); };
