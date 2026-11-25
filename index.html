@@ -126,7 +126,7 @@
 <body>
 <div class="wrap">
   <h1>Magazyn – wydawanie <span class="dot" id="net">…</span></h1>
-  <div class="modes"><button id="m-ekran">📦 Wydaj</button><button id="m-miejsca">📍 Miejsca</button><button id="m-szukaj">🔍 Szukaj</button><button id="m-admin">🎛️ Admin</button></div>
+  <div class="modes"><button id="m-ekran">📦 Wydaj</button><button id="m-miejsca" hidden>📍 Miejsca</button><button id="m-szukaj">🔍 Szukaj</button><button id="m-admin">🎛️ Admin</button></div>
   <div class="mebar" id="meBar" hidden>👤 <b id="meName"></b><a href="#" id="meChange">zmień osobę</a></div>
   <div id="whoBox" hidden>
     <h2>Kto korzysta z tego telefonu?</h2>
@@ -152,6 +152,21 @@
       <div class="srow"><input id="adPass" type="password" inputmode="numeric" placeholder="Hasło" autocomplete="off"><button class="sm" id="adGo">Wejdź</button></div>
     </div>
     <div id="adBody" hidden>
+      <div class="adsec">
+        <h3>🔗 Mapowanie kodów z opakowań</h3>
+        <div class="hint">Zeskanuj kod kreskowy z opakowania producenta, potem naszą etykietę z wieczka (albo wyszukaj produkt). Od tej chwili kod z opakowania działa u wszystkich.</div>
+        <div class="locnow"><div class="v" id="adMapNow">— zeskanuj kod z opakowania —</div></div>
+        <div id="adMapPick" hidden>
+          <input id="adMapQ" placeholder="…albo wpisz nazwę produktu" autocomplete="off">
+          <ul class="res" id="adMapRes"></ul>
+          <div class="row"><button class="sm" id="adMapNew">To nowy produkt – dodaj niżej</button><button class="sm cancel" id="adMapCancel">Anuluj</button></div>
+        </div>
+      </div>
+      <div class="adsec">
+        <h3>📍 Rozkładanie na półki</h3>
+        <div class="hint">Przypisywanie towarów do szafy i półki.</div>
+        <button class="big" id="adLoc">📍 Otwórz tryb Miejsca</button>
+      </div>
       <div class="adsec">
         <h3>👤 Osoby</h3>
         <ul class="adlist" id="adPeople"></ul>
@@ -245,7 +260,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="config.js?v=8"></script>
 <script>
-const APP_VERSION = "1795587332";
+const APP_VERSION = "1795587484";
 // automatyczne odświeżenie, gdy pojawi się nowa wersja aplikacji
 async function checkUpdate(){ try{ const v=(await fetch("version.txt?"+Date.now(),{cache:"no-store"}).then(r=>r.text())).trim(); if(v && v!==APP_VERSION && !st.co && !batch.length) location.reload(); }catch(e){} }
 setInterval(checkUpdate, 120000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkUpdate(); });
@@ -287,7 +302,7 @@ function render(changed){
   const known = st.co && NAMES[st.co];
   $("v-co").textContent = !st.co ? "—" : (known ? NAMES[st.co] : "❓ nieznany towar");
   $("c-co").innerHTML = st.co ? "kod: " + esc(st.co) + (MIEJSCA[st.co] ? '<div class="cloc">📍 ' + esc(MIEJSCA[st.co]) + '</div>' : "") + (st.waznosc ? '<div class="cexp">⏳ ważne do ' + esc(st.waznosc) + (st.partia ? ' · partia ' + esc(st.partia) : '') + '</div>' : "") : "";
-  $("rename").hidden = !known;
+  $("rename").hidden = !known || !isAdmin();
   const nb = $("namebox"), showNb = !!st.co && !known;
   if(showNb && nb.hidden){ $("nameIn").value = ""; nb.hidden = false; setTimeout(()=>$("nameIn").focus(), 50); }
   if(!showNb && !renaming) nb.hidden = true;
@@ -320,7 +335,7 @@ function handle(raw){
   if(mode==="admin"){
     if(!adPass){ say("Najpierw wpisz hasło.", "err"); return; }
     if(code.startsWith("VM:")){ say("W panelu skanuj kod produktu.", "err"); return; }
-    $("adCode").value=code; adShowProd(); $("adPName").focus(); feedback(true); return;
+    return adMapScan(code);
   }
   if(mode==="szukaj"){
     if(code.startsWith("VM:")){ say("W wyszukiwarce skanuj kod z opakowania.", "err"); feedback(false); return; }
@@ -361,10 +376,9 @@ function handle(raw){
       render("co"); say("✓ "+(k ? describe(k) : "nowy produkt")+(p.waznosc?" · ważne do "+p.waznosc:"")+" — "+P(nextStep()), "ok"); if(k) feedback(true);
     };
     if(p.co){ take(p.co, p.j); return; }
-    if(mode==="ekran" && Object.keys(NAMES).length){
-      const cur = NAMES[st.co] ? st.co : "";
-      openLink(p, take);
-      if(cur) $("linkRes").innerHTML = `<li class="pick" data-k="${esc(cur)}"><span class="go">To ten ›</span><b>${esc(NAMES[cur])}</b><span class="hint">${esc(cur)} · właśnie wybrany</span></li>`;
+    if(mode==="ekran"){
+      say("Nie znam tego kodu. Zeskanuj naszą etykietę z wieczka albo wyszukaj towar poniżej. (Nowe kody przypisuje administrator.)", "err"); feedback(false);
+      if($("isBox").hidden===false) $("isQ").focus();
       return;
     }
     take(null, "", p.key); return;
@@ -447,6 +461,7 @@ function doLink(k){
 $("linkNew").onclick=()=>{ const cb=linkCb; if(!cb) return; const key=linkKey; closeLink(); cb(null, "", key); };
 $("linkCancel").onclick=()=>{ closeLink(); st=empty(); undo=[]; render(); say("Anulowano. "+P("co")); };
 
+function isAdmin(){ try{ return !!adPass; }catch(e){ return false; } }
 // ---------- tryb ekranowy ----------
 const COLORS=["#2563eb","#16a34a","#db2777","#ea580c","#7c3aed","#0891b2","#ca8a04","#dc2626"];
 function photoUrl(u){
@@ -572,7 +587,45 @@ async function adPost(body){
   const r = await fetch(API,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(Object.assign({haslo:adPass},body))});
   return r.json();
 }
+// mapowanie kodów (tylko admin)
+let adMap = null;   // {key, waznosc} – czekający kod z opakowania
+function adMapDraw(){
+  $("adMapNow").textContent = adMap ? ("Kod z opakowania: "+adMap.key+" → teraz zeskanuj naszą etykietę z wieczka") : "— zeskanuj kod z opakowania —";
+  $("adMapPick").hidden = !adMap; if(!adMap){ $("adMapQ").value=""; $("adMapRes").innerHTML=""; }
+}
+function adMapSave(k){
+  const key=adMap.key;
+  KODY[key]={p:k,j:""}; LS.set("vm_kody", KODY);
+  queue.push({typ:"kod", kod:key, produkt:k, jednostka:"", kto:me()||"admin", id:"k"+Date.now().toString(36)}); LS.set("vm_queue", queue); flush();
+  adMap=null; adMapDraw(); say("🔗 Zapamiętane: "+key+" = "+NAMES[k]+". Skanuj kolejny kod z opakowania.", "ok"); feedback(true);
+}
+function adMapScan(code){
+  const p=resolve(code);
+  const own = NAMES[p.raw] ? p.raw : (NAMES[p.key] ? p.key : "");
+  if(adMap){
+    if(own){ adMapSave(own); return; }
+    if(p.co){ adMapSave(p.co); return; }   // zeskanowano inny, już przypisany kod tego samego produktu
+    adMap={key:p.key}; adMapDraw(); say("Ten kod też jest nieznany – zaczynam od niego. Teraz zeskanuj naszą etykietę z wieczka.", "err"); feedback(false); return;
+  }
+  if(own){ $("adCode").value=own; adShowProd(); say("To nasz kod: "+NAMES[own]+". Żeby przypisać kod z opakowania, zeskanuj najpierw kod producenta.", "ok"); feedback(true); return; }
+  if(p.co){ adMap={key:p.key}; adMapDraw(); say("Ten kod jest już przypisany do: "+NAMES[p.co]+". Zeskanuj naszą etykietę, żeby zmienić przypisanie, albo Anuluj.", "ok"); feedback(true); return; }
+  adMap={key:p.key}; adMapDraw(); say("Nowy kod "+p.key+(p.waznosc?" (ważne do "+p.waznosc+")":"")+". Zeskanuj naszą etykietę z wieczka albo wyszukaj produkt.", "ok"); feedback(true);
+}
+$("adMapQ").addEventListener("input",()=>{
+  const q=fold($("adMapQ").value).trim(), box=$("adMapRes");
+  if(q.length<2){ box.innerHTML=""; return; }
+  const words=q.split(/\s+/);
+  const list=Object.keys(NAMES).filter(k=>{ const t=fold(NAMES[k]+" "+k); return words.every(w=>t.includes(w) || (w.length>=5 && t.includes(w.slice(0,w.length-2)))); }).sort((a,b)=>NAMES[a].localeCompare(NAMES[b],"pl"));
+  box.innerHTML = list.length ? list.slice(0,15).map(k=>`<li class="pick" data-k="${esc(k)}"><span class="go">To ten ›</span><b>${esc(NAMES[k])}</b><span class="hint">${esc(k)}</span></li>`).join("") : "<li>Nic nie znaleziono.</li>";
+});
+$("adMapRes").addEventListener("click",e=>{ const li=e.target.closest("li.pick"); if(li && adMap) adMapSave(li.dataset.k); });
+$("adMapCancel").onclick=()=>{ adMap=null; adMapDraw(); say("Anulowano."); };
+$("adMapNew").onclick=()=>{ if(!adMap) return; $("adCode").value=adMap.key; adMap=null; adMapDraw(); adShowProd(); $("adPName").focus(); $("adPName").scrollIntoView({behavior:"smooth",block:"center"}); say("Wpisz nazwę nowego produktu i Zapisz.", "ok"); };
+$("adLoc").onclick=()=>setMode("miejsca");
+function adVis(){ $("m-miejsca").hidden = !adPass; if(!adPass) $("rename").hidden = true; }
+
 function adRender(){
+  adVis();
   $("adLogin").hidden = !!adPass; $("adBody").hidden = !adPass;
   if(!adPass) return;
   $("adPeople").innerHTML = OSOBY.length ? OSOBY.map((o,i)=>{
@@ -592,7 +645,7 @@ $("adGo").onclick = async ()=>{
   }catch(e){ adPass=""; say("Brak połączenia.", "err"); }
 };
 $("adPass").addEventListener("keydown",e=>{ if(e.key==="Enter") $("adGo").click(); });
-$("adOut").onclick=()=>{ adPass=""; try{ sessionStorage.removeItem("vm_ad"); }catch(e){} adRender(); say("Wylogowano z panelu."); };
+$("adOut").onclick=()=>{ adPass=""; try{ sessionStorage.removeItem("vm_ad"); }catch(e){} adMap=null; adMapDraw(); adRender(); say("Wylogowano z panelu."); };
 // zdjęcie: kadrowanie do kwadratu 160 px, JPEG
 $("adFile").addEventListener("change", async e=>{
   const f=e.target.files&&e.target.files[0]; e.target.value=""; if(!f) return;
@@ -942,7 +995,7 @@ $("zoomBtn").onclick = ()=>{ if(!zoomLevels.length) return; zoomIdx=(zoomIdx+1)%
 document.addEventListener("visibilitychange", ()=>{ if(document.hidden && camOn) stopCam(); });
 
 // ---------- start ----------
-drawPeople(); drawLoc();
+drawPeople(); drawLoc(); adVis(); adMapDraw(); if(mode==="miejsca" && !adPass) setMode("ekran");
 rows = LS.get("vm_rows", []);
 render(); drawLog(); status(); flush(); pull();
 </script>
