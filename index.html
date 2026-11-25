@@ -64,6 +64,9 @@
   .cnt input{flex:1;height:64px;font-size:34px;font-weight:800;text-align:center;border:2px solid var(--line);border-radius:14px;min-width:0}
   .mebar{display:flex;align-items:center;gap:8px;margin:8px 0 2px;font-size:15px}
   .mebar a{margin-left:auto;font-size:14px}
+  #lokSel{margin-left:6px;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:13px;font-weight:700;max-width:46%}
+  #lokSel.flash{animation:lokfl 1.6s}
+  @keyframes lokfl{0%,40%{background:#fde68a;border-color:#f59e0b}100%{background:#fff}}
   #permBox{position:fixed;inset:0;z-index:51;background:#fff;overflow:auto;padding:24px 16px}
   #permBox h2{margin:0 0 8px;font-size:22px}
   #whoBox{position:fixed;inset:0;z-index:50;background:#fff;overflow:auto;padding:24px 16px}
@@ -135,7 +138,7 @@
 <div class="wrap">
   <h1>Magazyn – wydawanie <span class="dot" id="net">…</span></h1>
   <div class="modes"><button id="m-ekran">📦 Wydaj</button><button id="m-miejsca" hidden>📍 Miejsca</button><button id="m-szukaj">🔍 Szukaj</button><button id="m-admin">🎛️ Admin</button></div>
-  <div class="mebar" id="meBar" hidden>👤 <b id="meName"></b><a href="#" id="meChange">zmień osobę</a></div>
+  <div class="mebar" id="meBar" hidden>👤 <b id="meName"></b><select id="lokSel" title="Lokal"></select><a href="#" id="meChange">zmień osobę</a></div>
   <div id="whoBox" hidden>
     <h2>Kto korzysta z tego telefonu?</h2>
     <div class="hint">Wybierz siebie – aplikacja zapamięta i będzie Cię wpisywać przy wydaniach i rozkładaniu towaru.</div>
@@ -277,7 +280,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="config.js?v=8"></script>
 <script>
-const APP_VERSION = "1795589338";
+const APP_VERSION = "1795593631";
 // automatyczne odświeżenie, gdy pojawi się nowa wersja aplikacji
 async function checkUpdate(){ try{ const v=(await fetch("version.txt?"+Date.now(),{cache:"no-store"}).then(r=>r.text())).trim(); if(v && v!==APP_VERSION && !st.co && !batch.length) location.reload(); }catch(e){} }
 setInterval(checkUpdate, 120000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkUpdate(); });
@@ -294,7 +297,26 @@ const LS = {
 NAMES = LS.get("vm_names", {});
 let mode = LS.get("vm_mode", "ekran"); if(mode==="qr") mode="ekran";
 let OSOBY = LS.get("vm_osoby", []);
-let MIEJSCA = LS.get("vm_miejsca", {}), USTAWIL = LS.get("vm_ustawil", {});
+// lokale (kliniki): 001 = Migdałowa 4
+let LOKAL = LS.get("vm_lokal", "001"), LOKALE = LS.get("vm_lokale", {"001":"Migdałowa 4"});
+let MIEJSCA_L = LS.get("vm_miejscaL", null) || {"001": LS.get("vm_miejsca", {})};
+let USTAWIL_L = LS.get("vm_ustawilL", null) || {"001": LS.get("vm_ustawil", {})};
+let MIEJSCA = MIEJSCA_L[LOKAL] = MIEJSCA_L[LOKAL] || {}, USTAWIL = USTAWIL_L[LOKAL] = USTAWIL_L[LOKAL] || {};
+function saveLocs(){ LS.set("vm_miejscaL", MIEJSCA_L); LS.set("vm_ustawilL", USTAWIL_L); }
+function lokName(L){ return L + (LOKALE[L] ? " · " + LOKALE[L] : ""); }
+function switchLokal(L){
+  if(!L || L===LOKAL) return false;
+  LOKAL=L; LS.set("vm_lokal", L);
+  MIEJSCA = MIEJSCA_L[L] = MIEJSCA_L[L] || {}; USTAWIL = USTAWIL_L[L] = USTAWIL_L[L] || {};
+  drawLokal(true); try{ drawLog(); }catch(e){}
+  return true;
+}
+function drawLokal(flash){
+  const sel=$("lokSel"); if(!sel) return;
+  const all=Object.assign({}, LOKALE); all[LOKAL]=all[LOKAL]||"";
+  sel.innerHTML=Object.keys(all).sort().map(L=>`<option value="${esc(L)}"${L===LOKAL?" selected":""}>📍 ${esc(lokName(L))}</option>`).join("");
+  if(flash){ sel.classList.remove("flash"); void sel.offsetWidth; sel.classList.add("flash"); }
+}
 const nm = c => NAMES[c] || c;
 
 function say(t, kind){ const m=$("msg"); m.textContent=t; m.className="msg"+(kind?" "+kind:""); }
@@ -416,7 +438,8 @@ function gs1Date(s){
 }
 function parseScan(raw){
   let s=String(raw||"").trim().replace(/^\][A-Za-z]\d/,"").replace(/^\x1d+/,"");
-  const out={raw:String(raw||"").trim(), key:"", gtin:"", partia:"", waznosc:""};
+  const out={raw:String(raw||"").trim(), key:"", gtin:"", partia:"", waznosc:"", lokal:""};
+  const lm=s.match(/^(\d{3})-(\S+)$/); if(lm){ out.lokal=lm[1]; s=lm[2]; }   // nasza etykieta: 001-PRD0354505
   const FIX={"00":18,"01":14,"02":14,"11":6,"12":6,"13":6,"15":6,"16":6,"17":6,"20":2};
   let f=null;
   if(/^\(\d{2,4}\)/.test(s)){                      // zapis z nawiasami: (01)...(17)...(10)...
@@ -447,6 +470,7 @@ function parseScan(raw){
 let KODY = LS.get("vm_kody", {});   // kod z opakowania -> {p: nasz kod, j: jednostka}
 function resolve(raw){
   const p=parseScan(raw);
+  if(p.lokal && switchLokal(p.lokal)) setTimeout(()=>say("📍 Przełączono na lokal "+lokName(p.lokal)+". "+$("msg").textContent.replace(/^📍 Przełączono[^.]*\.\s*/,""), "ok"), 0);
   for(const c of [p.raw,p.key]) if(c && NAMES[c]) return Object.assign(p,{co:c});
   for(const c of [p.raw,p.key]) if(c && KODY[c] && KODY[c].p) return Object.assign(p,{co:KODY[c].p, j:KODY[c].j||""});
   return Object.assign(p,{co:""});
@@ -540,6 +564,8 @@ $("m-admin").onclick=()=>{ setMode("admin"); adRender(); say(adPass ? "Panel adm
 // ---------- miejsca (szafa / półka) ----------
 let curLoc = "", locKto = LS.get("vm_lockto", ""), pendingAssign = "", batch = [];
 function locLabel(code){
+  const lm=code.match(/^VM:MIEJSCE:(\d{3}):/i);
+  if(lm){ switchLokal(lm[1]); code="VM:MIEJSCE:"+code.slice(lm[0].length); }
   let m=code.match(/^VM:MIEJSCE:S(\d+)-P(\d+)$/i); if(m) return `Szafa ${+m[1]}, półka ${+m[2]}`;
   m=code.match(/^VM:MIEJSCE:S(\d+)-G$/i); if(m) return `Szafa ${+m[1]}, na szafie`;
   return "";
@@ -570,6 +596,8 @@ function handleLoc(code){
   if(code.startsWith("VM:")){ say("To nie jest kod półki ani towaru.", "err"); feedback(false); return; }
   if(!locKto){ say("Najpierw wybierz, kto rozkłada.", "err"); feedback(false); return; }
   if(!curLoc){ say("Najpierw zeskanuj kod QR półki.", "err"); feedback(false); return; }
+  const lp=code.match(/^(\d{3})-/);
+  if(lp && lp[1]!==LOKAL){ say("Ta etykieta jest z lokalu "+lokName(lp[1])+", a półka z "+lokName(LOKAL)+". Użyj etykiety tego lokalu.", "err"); feedback(false); return; }
   const rp=resolve(code);
   if(rp.co){ addToBatch(rp.co); return; }
   if(Object.keys(NAMES).length){ openLink(rp, (k, j, newKey)=>{ if(k){ addToBatch(k); return; } code=newKey; pendingAssign=code; st.co=code; renaming=false; $("nameIn").value=""; $("namebox").hidden=false; setTimeout(()=>$("nameIn").focus(),50); say("Nowy towar – wpisz nazwę i kliknij Zapisz.", "err"); }); return; }
@@ -594,9 +622,9 @@ $("locOk").onclick=()=>{
   const now=Date.now(), when=new Date(now).toLocaleString("pl-PL");
   for(const k of batch){
     MIEJSCA[k]=curLoc; USTAWIL[k]=locKto+", "+when.replace(/:\d\d$/,"");
-    queue.push({typ:"miejsce", kod:k, miejsce:curLoc, kto:locKto, t:now, id:"m"+now.toString(36)+Math.random().toString(36).slice(2,6)});
+    queue.push({typ:"miejsce", lokal:LOKAL, kod:k, miejsce:curLoc, kto:locKto, t:now, id:"m"+now.toString(36)+Math.random().toString(36).slice(2,6)});
   }
-  LS.set("vm_miejsca", MIEJSCA); LS.set("vm_ustawil", USTAWIL); LS.set("vm_queue", queue);
+  saveLocs(); LS.set("vm_queue", queue);
   const n=batch.length; batch=[]; drawLoc(); flush();
   say(`Zapisano ${n} ${n===1?"towar":"towary/ów"} na: ${curLoc}. Zeskanuj kolejną półkę.`, "ok"); feedback(true);
 };
@@ -737,7 +765,7 @@ $("adDelProd").onclick = async ()=>{
 };
 async function adLoadWyd(){
   try{ const j=await fetch(API+"?n=200").then(r=>r.json()); adWpisy=j.wpisy||[]; }catch(e){ adWpisy=[]; }
-  $("adWyd").innerHTML = adWpisy.length ? adWpisy.map(w=>`<li><input type="checkbox" value="${esc(w.id)}"><span class="grow">${esc(String(w.czas).replace(/:\d\d$/,""))} · <b>${esc(w.nazwa||w.co)}</b> · ${esc(w.ile)} ${w.jednostka==="opakowanie"?"op.":"szt."} · ${esc(w.kto)}</span></li>`).join("") : '<li class="hint">Brak wydań.</li>';
+  $("adWyd").innerHTML = adWpisy.length ? adWpisy.map(w=>`<li><input type="checkbox" value="${esc(w.id)}"><span class="grow">${esc(String(w.czas).replace(/:\d\d$/,""))} · <b>${esc(w.nazwa||w.co)}</b> · ${esc(w.ile)} ${w.jednostka==="opakowanie"?"op.":"szt."} · ${esc(w.kto)} · 📍${esc(w.lokal||"001")}</span></li>`).join("") : '<li class="hint">Brak wydań.</li>';
 }
 async function adDelete(body, label){
   try{ const j=await adPost(Object.assign({typ:"wydania_usun"},body)); if(!j.ok) throw 0;
@@ -817,6 +845,7 @@ $("permGo").onclick=async ()=>{
 $("permSkip").onclick=()=>{ LS.set("vm_perm", true); $("permBox").hidden=true; };
 $("meChange").onclick=e=>{ e.preventDefault(); for(const b of $("whoPeople").querySelectorAll("button")) b.classList.toggle("on", b.dataset.kto===me()); $("whoCancel").hidden=!me(); $("whoBox").hidden=false; };
 $("whoCancel").onclick=()=>{ $("whoBox").hidden=true; };
+$("lokSel").onchange=()=>{ switchLokal($("lokSel").value); say("📍 Lokal: "+lokName(LOKAL)+". Wydania zapiszą się pod tym lokalem.", "ok"); if(mode==="szukaj") doSearch(); };
 
 // ---------- wyszukiwarka na ekranie wydania ----------
 function isSearch(){
@@ -907,7 +936,7 @@ let queue = LS.get("vm_queue", []);
 function save(r){
   const now = new Date();
   r.id = now.getTime().toString(36) + Math.random().toString(36).slice(2,7);
-  r.t = now.getTime(); r.czas = now.toLocaleString("pl-PL");
+  r.t = now.getTime(); r.czas = now.toLocaleString("pl-PL"); r.lokal = LOKAL;
   mine[r.id] = r.t; LS.set("vm_mine", mine);
   rows.unshift(r); rows = rows.slice(0,50); LS.set("vm_rows", rows); drawLog();
   queue.push(r); LS.set("vm_queue", queue);
@@ -915,7 +944,7 @@ function save(r){
   say(`Zapisano: ${r.nazwa} – ${r.ile} ${r.jednostka} – ${r.kto}. Pomyłka? „Cofnij” w tabeli (5 min).`, "ok"); feedback(true);
   flush();
 }
-function pendingLocs(){ const o={}; queue.filter(q=>q.typ==="miejsce").forEach(q=>o[q.kod]=q.miejsce); for(const k in o) if(!o[k]) delete o[k]; return o; }
+function pendingLocs(L){ const o={}; queue.filter(q=>q.typ==="miejsce" && (q.lokal||"001")===L).forEach(q=>o[q.kod]=q.miejsce); for(const k in o) if(!o[k]) delete o[k]; return o; }
 function pendingNames(){ const o={}; queue.filter(q=>q.typ==="towar").forEach(q=>o[q.kod]=q.nazwa); return o; }
 let flushing = false;
 async function flush(){
@@ -943,8 +972,15 @@ async function pull(){
     const res = await fetch(API + "?list=1");
     const j = await res.json();
     if(Array.isArray(j.osoby)){ const same=JSON.stringify(j.osoby)===JSON.stringify(OSOBY); OSOBY=j.osoby; LS.set("vm_osoby", OSOBY); if(!same){ drawPeople(); render(); } }
-    if(j.ustawil){ USTAWIL = Object.assign({}, j.ustawil); LS.set("vm_ustawil", USTAWIL); }
-    if(j.miejsca){ MIEJSCA = Object.assign({}, j.miejsca, pendingLocs()); LS.set("vm_miejsca", MIEJSCA); }
+    if(j.lokale){ LOKALE = j.lokale; LS.set("vm_lokale", LOKALE); drawLokal(); }
+    const mL = j.miejscaL || (j.miejsca ? {"001": j.miejsca} : null), uL = j.ustawilL || (j.ustawil ? {"001": j.ustawil} : null);
+    if(mL){
+      MIEJSCA_L = {}; for(const L in mL) MIEJSCA_L[L] = Object.assign({}, mL[L]);
+      USTAWIL_L = {}; for(const L in (uL||{})) USTAWIL_L[L] = Object.assign({}, uL[L]);
+      for(const q of queue) if(q.typ==="miejsce"){ const L=q.lokal||"001"; MIEJSCA_L[L]=MIEJSCA_L[L]||{}; if(q.miejsce) MIEJSCA_L[L][q.kod]=q.miejsce; else delete MIEJSCA_L[L][q.kod]; }
+      MIEJSCA = MIEJSCA_L[LOKAL] = MIEJSCA_L[LOKAL] || {}; USTAWIL = USTAWIL_L[LOKAL] = USTAWIL_L[LOKAL] || {};
+      saveLocs();
+    }
     if(j.kody){ KODY = Object.assign({}, j.kody, pendingKody()); LS.set("vm_kody", KODY); }
     if(j.towary){ NAMES = Object.assign({}, j.towary, pendingNames()); LS.set("vm_names", NAMES); render(); }
     if(Array.isArray(j.wpisy)){
@@ -992,8 +1028,9 @@ setInterval(()=>{ if(rows.some(canUndo) || document.querySelector(".undo")) draw
 function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 function drawLog(){
   const tb=$("log");
-  if(!rows.length){ tb.innerHTML='<tr><td colspan="5">Brak wpisów.</td></tr>'; return; }
-  tb.innerHTML = rows.slice(0,20).map(r=>`<tr><td>${esc(String(r.czas||"").replace(/:\d\d$/,""))}</td><td>${esc(r.nazwa||r.co)}</td><td>${esc(r.ile)} ${r.jednostka==="opakowanie"?"op.":"szt."}</td><td>${esc(r.kto)}</td><td>${canUndo(r) ? `<button class="undo${sure===r.id?" sure":""}" data-id="${esc(r.id)}">${sure===r.id?"Na pewno?":"Cofnij "+fmtLeft(r)}</button>` : ""}</td></tr>`).join("");
+  const lr = rows.filter(r=>(r.lokal||"001")===LOKAL);
+  if(!lr.length){ tb.innerHTML='<tr><td colspan="5">Brak wpisów.</td></tr>'; return; }
+  tb.innerHTML = lr.slice(0,20).map(r=>`<tr><td>${esc(String(r.czas||"").replace(/:\d\d$/,""))}</td><td>${esc(r.nazwa||r.co)}</td><td>${esc(r.ile)} ${r.jednostka==="opakowanie"?"op.":"szt."}</td><td>${esc(r.kto)}</td><td>${canUndo(r) ? `<button class="undo${sure===r.id?" sure":""}" data-id="${esc(r.id)}">${sure===r.id?"Na pewno?":"Cofnij "+fmtLeft(r)}</button>` : ""}</td></tr>`).join("");
 }
 
 // ---------- klawiatura / skaner sprzętowy ----------
@@ -1064,7 +1101,7 @@ $("zoomBtn").onclick = ()=>{ if(!zoomLevels.length) return; zoomIdx=(zoomIdx+1)%
 document.addEventListener("visibilitychange", ()=>{ if(document.hidden && camOn) stopCam(); });
 
 // ---------- start ----------
-askPerm(); camVis(); drawPeople(); drawLoc(); adVis(); adMapDraw(); adShowTab(adTab, true); if(mode==="admin"){ adRender(); say(adPass ? "Panel administratora." : "Wpisz hasło administratora."); } else if(mode==="szukaj") say("Wpisz nazwę albo powiedz 🎤 – pokażę, gdzie leży."); if(mode==="miejsca" && !adPass) setMode("ekran");
+drawLokal(); askPerm(); camVis(); drawPeople(); drawLoc(); adVis(); adMapDraw(); adShowTab(adTab, true); if(mode==="admin"){ adRender(); say(adPass ? "Panel administratora." : "Wpisz hasło administratora."); } else if(mode==="szukaj") say("Wpisz nazwę albo powiedz 🎤 – pokażę, gdzie leży."); if(mode==="miejsca" && !adPass) setMode("ekran");
 rows = LS.get("vm_rows", []);
 render(); drawLog(); status(); flush(); pull();
 </script>
