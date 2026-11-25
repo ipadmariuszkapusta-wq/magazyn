@@ -39,6 +39,8 @@
   .big.stop{background:#475569}
   .row{display:flex;gap:8px;margin-top:10px}
   .row input{flex:1;padding:12px;font-size:16px;border:1px solid var(--line);border-radius:10px}
+  .row button.big{background:var(--acc);color:#fff;border:0;font-size:19px;font-weight:700;padding:16px}
+  .row button.big.stop{background:#475569}
   .row button,.sm{padding:12px 14px;border:1px solid var(--line);background:#fff;border-radius:10px;font-size:15px;cursor:pointer}
   .hint{font-size:13px;color:var(--mut);margin-top:6px}
   h2{font-size:15px;margin:20px 0 8px}
@@ -96,7 +98,7 @@
   .srow #q{flex:1;width:auto}
   #isMic{width:56px;border:2px solid var(--acc);background:#fff;border-radius:12px;font-size:24px;cursor:pointer}
   #isMic.rec{background:#fee2e2;border-color:var(--err)}
-  .srow #isQ{flex:1;width:auto}
+  .srow #isQ{flex:1;width:auto;padding:13px 14px;font-size:16px;border:1px solid var(--line);border-radius:10px;background:#fff}
   #isBox{margin-top:10px}
   #mic{width:56px;border:2px solid var(--acc);background:#fff;border-radius:12px;font-size:24px;cursor:pointer}
   #mic.rec{background:#fee2e2;border-color:var(--err);animation:pulse 1s infinite}
@@ -138,6 +140,21 @@
     <button class="sm cancel" id="whoCancel" hidden style="margin-top:16px">Anuluj</button>
   </div>
 
+  <div id="reader"></div>
+  <div class="row"><button class="big" id="camBtn" style="margin-top:0">📷 Włącz aparat</button><button class="sm" id="zoomBtn" hidden style="min-width:84px;font-weight:700">🔍 2x</button></div>
+
+  <div class="msg" id="msg">Włącz aparat i zeskanuj kod kreskowy towaru.</div>
+
+  <div id="isBox" hidden>
+    <div class="tl">Nie skanuje? Wyszukaj towar</div>
+    <div class="srow"><input id="isQ" placeholder="Wpisz nazwę, np. rękawiczki" autocomplete="off"><button id="isMic" title="Powiedz">🎤</button></div>
+    <ul class="res" id="isRes"></ul>
+  </div>
+  <div class="row">
+    <input id="kb" placeholder="…albo wpisz kod kreskowy i Enter" autocomplete="off" enterkeyhint="send">
+    <button id="kbGo">OK</button>
+  </div>
+  
   <div id="locPanel" hidden>
     <div id="locWho"><div class="tl">Kto rozkłada</div>
     <div class="people" id="locPeople"></div></div>
@@ -228,13 +245,7 @@
     <div class="row"><button id="linkNew" style="background:#fff;color:#b45309;border:2px solid #f59e0b">To całkiem nowy produkt – wpiszę nazwę</button> <button id="linkCancel" style="background:#fff;color:#555;border:2px solid #ddd">Anuluj</button></div>
   </div>
 
-  <div class="msg" id="msg">Włącz aparat i zeskanuj kod kreskowy towaru.</div>
 
-  <div id="isBox" hidden>
-    <div class="tl">Nie skanuje? Wyszukaj towar</div>
-    <div class="srow"><input id="isQ" placeholder="Wpisz nazwę, np. rękawiczki" autocomplete="off"><button id="isMic" title="Powiedz">🎤</button></div>
-    <ul class="res" id="isRes"></ul>
-  </div>
 
   <div id="touch" hidden>
     <div class="tl">Jednostka</div>
@@ -244,17 +255,10 @@
     <div id="ktoWho"><div class="tl">Kto bierze</div>
     <div class="people" id="people"></div></div>
     <button class="big ok" id="confirmBtn">✔ ZATWIERDŹ</button>
-    <button class="sm cancel" id="cancelBtn">Anuluj ten towar</button>
+    <button class="sm cancel" id="cancelBtn" style="color:#dc2626;border-color:#fca5a5;background:#fef2f2;font-weight:700">✕ Anuluj ten towar</button>
   </div>
 
-  <div id="reader"></div>
-  <div class="row"><button class="big" id="camBtn" style="margin-top:0">📷 Włącz aparat</button><button class="sm" id="zoomBtn" hidden style="min-width:84px;font-weight:700">🔍 2x</button></div>
 
-  <div class="row">
-    <input id="kb" placeholder="Skaner / wpisz kod i Enter" autocomplete="off" enterkeyhint="send">
-    <button id="kbGo">OK</button>
-  </div>
-  <div class="hint">Skaner Bluetooth/USB lub terminal: kliknij w pole i skanuj.</div>
 
   <div id="hist"><h2>Ostatnie wydania</h2>
   <table><thead><tr><th>Kiedy</th><th>Co</th><th>Ile</th><th>Kto</th><th></th></tr></thead><tbody id="log"><tr><td colspan="5">Ładowanie…</td></tr></tbody></table></div>
@@ -264,7 +268,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="config.js?v=8"></script>
 <script>
-const APP_VERSION = "1795588084";
+const APP_VERSION = "1795588330";
 // automatyczne odświeżenie, gdy pojawi się nowa wersja aplikacji
 async function checkUpdate(){ try{ const v=(await fetch("version.txt?"+Date.now(),{cache:"no-store"}).then(r=>r.text())).trim(); if(v && v!==APP_VERSION && !st.co && !batch.length) location.reload(); }catch(e){} }
 setInterval(checkUpdate, 120000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkUpdate(); });
@@ -380,6 +384,7 @@ function handle(raw){
       renaming = false; if(mode==="ekran"){ st.ile = st.ile || "1"; }
       undo.push(prev2); if(undo.length>30) undo.shift();
       render("co"); say("✓ "+(k ? describe(k) : "nowy produkt")+(p.waznosc?" · ważne do "+p.waznosc:"")+" — "+P(nextStep()), "ok"); if(k) feedback(true);
+      if(k && mode==="ekran") setTimeout(()=>$("steps").scrollIntoView({behavior:"smooth", block:"start"}),50);
     };
     if(p.co){ take(p.co, p.j); return; }
     if(mode==="ekran"){
@@ -595,10 +600,11 @@ async function adPost(body){
 }
 // zakładki panelu admina
 let adTab = LS.get("vm_adtab","map");
-function adShowTab(t){
+function adShowTab(t, quiet){
   adTab=t; LS.set("vm_adtab", t);
   for(const b of $("adTabs").querySelectorAll("button")) b.classList.toggle("on", b.dataset.t===t);
   for(const sec of document.querySelectorAll("[data-adtab]")) sec.hidden = sec.dataset.adtab!==t;
+  if(quiet) return;
   if(t==="map") say(adMap ? "Zeskanuj naszą etykietę z wieczka albo wyszukaj produkt." : "Zeskanuj kod z opakowania producenta.");
   else if(t==="prod") say("Zeskanuj albo wpisz kod produktu, podaj nazwę i zapisz.");
 }
@@ -644,7 +650,7 @@ function adRender(){
   adVis();
   $("adLogin").hidden = !!adPass; $("adBody").hidden = !adPass;
   if(!adPass) return;
-  adShowTab(adTab);
+  adShowTab(adTab, true);
   $("adPeople").innerHTML = OSOBY.length ? OSOBY.map((o,i)=>{
     const u=photoUrl(o.zdjecie), col=/^nieznan/i.test(o.imie)?"#9ca3af":COLORS[i%COLORS.length];
     const av = u ? `<img class="av" src="${esc(u)}" alt="">` : `<div class="av" style="background:${col}">${esc(initials(o.imie))}</div>`;
@@ -797,7 +803,7 @@ $("isRes").addEventListener("click",e=>{
   const k=li.dataset.k; $("isQ").blur();
   undo.push({...st}); st.co=k; st.jedn=""; st.ile=st.ile||"1"; renaming=false;
   render("co"); say("✓ "+NAMES[k]+" — "+P(nextStep()), "ok"); buzz(true);
-  $("s-co").scrollIntoView({behavior:"smooth", block:"start"});
+  $("steps").scrollIntoView({behavior:"smooth", block:"start"});
 });
 (function(){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -844,7 +850,7 @@ $("people").addEventListener("click",e=>{
   st.kto=b.dataset.kto; LS.set("vm_me", st.kto); render("kto"); say("✓ "+st.kto+" — "+P(nextStep()),"ok"); buzz(true);
 });
 $("confirmBtn").onclick=()=>{ if(document.activeElement===$("cntIn")) setQty($("cntIn").value); handle("VM:OK"); };
-$("cancelBtn").onclick=()=>{ st=empty(); undo=[]; render(); say("Anulowano. "+P("co")); };
+$("cancelBtn").onclick=()=>{ st=empty(); undo=[]; render(); say("Anulowano. "+P("co")); window.scrollTo({top:0, behavior:"smooth"}); };
 
 // ---------- nazwy towarów ----------
 let renaming = false;
@@ -876,7 +882,7 @@ function save(r){
   mine[r.id] = r.t; LS.set("vm_mine", mine);
   rows.unshift(r); rows = rows.slice(0,50); LS.set("vm_rows", rows); drawLog();
   queue.push(r); LS.set("vm_queue", queue);
-  st = empty(); undo = []; render();
+  st = empty(); undo = []; render(); window.scrollTo({top:0, behavior:"smooth"});
   say(`Zapisano: ${r.nazwa} – ${r.ile} ${r.jednostka} – ${r.kto}. Pomyłka? „Cofnij” w tabeli (5 min).`, "ok"); feedback(true);
   flush();
 }
@@ -1023,7 +1029,7 @@ $("zoomBtn").onclick = ()=>{ if(!zoomLevels.length) return; zoomIdx=(zoomIdx+1)%
 document.addEventListener("visibilitychange", ()=>{ if(document.hidden && camOn) stopCam(); });
 
 // ---------- start ----------
-autoCam(); drawPeople(); drawLoc(); adVis(); adMapDraw(); adShowTab(adTab); if(mode==="admin") adRender(); if(mode==="miejsca" && !adPass) setMode("ekran");
+autoCam(); drawPeople(); drawLoc(); adVis(); adMapDraw(); adShowTab(adTab, true); if(mode==="admin") adRender(); if(mode==="miejsca" && !adPass) setMode("ekran");
 rows = LS.get("vm_rows", []);
 render(); drawLog(); status(); flush(); pull();
 </script>
