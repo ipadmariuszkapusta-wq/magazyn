@@ -64,6 +64,8 @@
   .cnt input{flex:1;height:64px;font-size:34px;font-weight:800;text-align:center;border:2px solid var(--line);border-radius:14px;min-width:0}
   .mebar{display:flex;align-items:center;gap:8px;margin:8px 0 2px;font-size:15px}
   .mebar a{margin-left:auto;font-size:14px}
+  #permBox{position:fixed;inset:0;z-index:51;background:#fff;overflow:auto;padding:24px 16px}
+  #permBox h2{margin:0 0 8px;font-size:22px}
   #whoBox{position:fixed;inset:0;z-index:50;background:#fff;overflow:auto;padding:24px 16px}
   #whoBox h2{margin:0 0 6px;font-size:22px}
   #whoBox .people{margin-top:16px}
@@ -139,6 +141,13 @@
     <div class="hint">Wybierz siebie – aplikacja zapamięta i będzie Cię wpisywać przy wydaniach i rozkładaniu towaru.</div>
     <div class="people" id="whoPeople"></div>
     <button class="sm cancel" id="whoCancel" hidden style="margin-top:16px">Anuluj</button>
+  </div>
+  <div id="permBox" hidden>
+    <h2>Jeszcze jedno: aparat i mikrofon</h2>
+    <div class="hint">Aplikacja używa aparatu do skanowania kodów i mikrofonu do wyszukiwania głosem. Kliknij przycisk i na pytanie telefonu wybierz <b>„Zezwól”</b> (nie „tylko tym razem”).</div>
+    <button class="big" id="permGo" style="margin-top:20px">📷🎤 Zezwól na aparat i mikrofon</button>
+    <div class="msg" id="permMsg" hidden></div>
+    <button class="sm cancel" id="permSkip" style="margin-top:12px">Pomiń</button>
   </div>
 
   <div id="camArea"><div id="reader"></div>
@@ -268,7 +277,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="config.js?v=8"></script>
 <script>
-const APP_VERSION = "1795588884";
+const APP_VERSION = "1795589338";
 // automatyczne odświeżenie, gdy pojawi się nowa wersja aplikacji
 async function checkUpdate(){ try{ const v=(await fetch("version.txt?"+Date.now(),{cache:"no-store"}).then(r=>r.text())).trim(); if(v && v!==APP_VERSION && !st.co && !batch.length) location.reload(); }catch(e){} }
 setInterval(checkUpdate, 120000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkUpdate(); });
@@ -788,7 +797,24 @@ $("whoPeople").addEventListener("click",e=>{
   const b=e.target.closest("button"); if(!b) return;
   LS.set("vm_me", b.dataset.kto); LS.set("vm_lockto", b.dataset.kto);
   $("whoBox").hidden=true; applyMe(); render("kto"); drawLoc(); say("Cześć, "+b.dataset.kto+"! "+P(nextStep()), "ok"); buzz(true);
+  askPerm();
 });
+// jednorazowa zgoda na aparat i mikrofon
+function askPerm(){ if(!LS.get("vm_perm", false) && me()) $("permBox").hidden=false; }
+$("permGo").onclick=async ()=>{
+  const m=$("permMsg"); m.hidden=false; m.className="msg"; m.textContent="Odpowiedz na pytanie telefonu…";
+  let cam=false, mic=false;
+  try{ const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}}); s.getTracks().forEach(t=>t.stop()); cam=true; }catch(e){}
+  try{ const s=await navigator.mediaDevices.getUserMedia({audio:true}); s.getTracks().forEach(t=>t.stop()); mic=true; }catch(e){}
+  if(cam && mic){
+    LS.set("vm_perm", true); LS.set("vm_cam", true); m.className="msg ok"; m.textContent="✓ Gotowe – aparat i mikrofon działają.";
+    setTimeout(()=>{ $("permBox").hidden=true; autoCam(); }, 900); buzz(true);
+  } else {
+    m.className="msg err";
+    m.textContent = (!cam && !mic ? "Brak zgody na aparat i mikrofon." : !cam ? "Brak zgody na aparat." : "Brak zgody na mikrofon.")+" Kliknij jeszcze raz albo zezwól w ustawieniach przeglądarki (kłódka / „aA” przy adresie).";
+  }
+};
+$("permSkip").onclick=()=>{ LS.set("vm_perm", true); $("permBox").hidden=true; };
 $("meChange").onclick=e=>{ e.preventDefault(); for(const b of $("whoPeople").querySelectorAll("button")) b.classList.toggle("on", b.dataset.kto===me()); $("whoCancel").hidden=!me(); $("whoBox").hidden=false; };
 $("whoCancel").onclick=()=>{ $("whoBox").hidden=true; };
 
@@ -1038,7 +1064,7 @@ $("zoomBtn").onclick = ()=>{ if(!zoomLevels.length) return; zoomIdx=(zoomIdx+1)%
 document.addEventListener("visibilitychange", ()=>{ if(document.hidden && camOn) stopCam(); });
 
 // ---------- start ----------
-camVis(); drawPeople(); drawLoc(); adVis(); adMapDraw(); adShowTab(adTab, true); if(mode==="admin"){ adRender(); say(adPass ? "Panel administratora." : "Wpisz hasło administratora."); } else if(mode==="szukaj") say("Wpisz nazwę albo powiedz 🎤 – pokażę, gdzie leży."); if(mode==="miejsca" && !adPass) setMode("ekran");
+askPerm(); camVis(); drawPeople(); drawLoc(); adVis(); adMapDraw(); adShowTab(adTab, true); if(mode==="admin"){ adRender(); say(adPass ? "Panel administratora." : "Wpisz hasło administratora."); } else if(mode==="szukaj") say("Wpisz nazwę albo powiedz 🎤 – pokażę, gdzie leży."); if(mode==="miejsca" && !adPass) setMode("ekran");
 rows = LS.get("vm_rows", []);
 render(); drawLog(); status(); flush(); pull();
 </script>
