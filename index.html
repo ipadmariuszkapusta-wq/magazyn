@@ -73,6 +73,9 @@
   .big.ok:disabled{background:#9ca3af}
   .cancel{width:100%;margin-top:8px;color:var(--mut)}
   [hidden]{display:none!important}
+  .adtabs{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px;padding-bottom:2px}
+  .adtabs button{flex:0 0 auto;padding:8px 10px;border:2px solid var(--line);background:#fff;border-radius:999px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+  .adtabs button.on{border-color:var(--acc);background:#eff6ff;color:var(--acc)}
   .adsec{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px}
   .adsec h3{margin:0 0 8px;font-size:16px}
   .adsec input:not([type=checkbox]){width:100%;padding:12px;font-size:16px;border:1px solid var(--line);border-radius:10px;margin-top:6px}
@@ -152,22 +155,23 @@
       <div class="srow"><input id="adPass" type="password" inputmode="numeric" placeholder="Hasło" autocomplete="off"><button class="sm" id="adGo">Wejdź</button></div>
     </div>
     <div id="adBody" hidden>
-      <div class="adsec">
+      <div class="adtabs" id="adTabs"><button data-t="map">🔗 Kody</button><button data-t="loc">📍 Półki</button><button data-t="os">👤 Osoby</button><button data-t="prod">📦 Produkty</button><button data-t="wyd">🧾 Wydania</button></div>
+      <div class="adsec" data-adtab="map">
         <h3>🔗 Mapowanie kodów z opakowań</h3>
         <div class="hint">Zeskanuj kod kreskowy z opakowania producenta, potem naszą etykietę z wieczka (albo wyszukaj produkt). Od tej chwili kod z opakowania działa u wszystkich.</div>
-        <div class="locnow"><div class="v" id="adMapNow">— zeskanuj kod z opakowania —</div></div>
+        <div class="locnow"><div class="v" id="adMapNow" style="font-size:17px">— zeskanuj kod z opakowania —</div></div>
         <div id="adMapPick" hidden>
           <input id="adMapQ" placeholder="…albo wpisz nazwę produktu" autocomplete="off">
           <ul class="res" id="adMapRes"></ul>
-          <div class="row"><button class="sm" id="adMapNew">To nowy produkt – dodaj niżej</button><button class="sm cancel" id="adMapCancel">Anuluj</button></div>
+          <div class="row"><button class="sm" id="adMapNew">To nowy produkt</button><button class="sm cancel" id="adMapCancel">Anuluj</button></div>
         </div>
       </div>
-      <div class="adsec">
+      <div class="adsec" data-adtab="loc">
         <h3>📍 Rozkładanie na półki</h3>
         <div class="hint">Przypisywanie towarów do szafy i półki.</div>
         <button class="big" id="adLoc">📍 Otwórz tryb Miejsca</button>
       </div>
-      <div class="adsec">
+      <div class="adsec" data-adtab="os">
         <h3>👤 Osoby</h3>
         <ul class="adlist" id="adPeople"></ul>
         <div class="tl">Dodaj osobę</div>
@@ -178,7 +182,7 @@
         </div>
         <button class="big ok" id="adAddPerson">➕ Dodaj osobę</button>
       </div>
-      <div class="adsec">
+      <div class="adsec" data-adtab="prod">
         <h3>📦 Produkty</h3>
         <div class="hint">Zeskanuj kod produktu (albo wpisz), podaj nazwę i zapisz. Istniejący kod = zmiana nazwy.</div>
         <input id="adCode" placeholder="Kod kreskowy" autocomplete="off">
@@ -187,7 +191,7 @@
         <div class="row"><button class="big ok" id="adSaveProd">💾 Zapisz produkt</button></div>
         <button class="sm cancel" id="adDelProd">🗑 Usuń ten produkt z listy</button>
       </div>
-      <div class="adsec">
+      <div class="adsec" data-adtab="wyd">
         <h3>🧾 Wydania</h3>
         <div class="tl">Usuń wszystkie wydania do dnia (włącznie)</div>
         <div class="srow"><input id="adDate" type="date"><button class="sm danger" id="adDelDate">Usuń</button></div>
@@ -260,7 +264,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="config.js?v=8"></script>
 <script>
-const APP_VERSION = "1795587484";
+const APP_VERSION = "1795587913";
 // automatyczne odświeżenie, gdy pojawi się nowa wersja aplikacji
 async function checkUpdate(){ try{ const v=(await fetch("version.txt?"+Date.now(),{cache:"no-store"}).then(r=>r.text())).trim(); if(v && v!==APP_VERSION && !st.co && !batch.length) location.reload(); }catch(e){} }
 setInterval(checkUpdate, 120000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkUpdate(); });
@@ -335,6 +339,8 @@ function handle(raw){
   if(mode==="admin"){
     if(!adPass){ say("Najpierw wpisz hasło.", "err"); return; }
     if(code.startsWith("VM:")){ say("W panelu skanuj kod produktu.", "err"); return; }
+    if(adTab==="prod"){ const k=resolve(code).co||resolve(code).key; $("adCode").value=k; adShowProd(); $("adPName").focus(); feedback(true); return; }
+    if(adTab!=="map") adShowTab("map");
     return adMapScan(code);
   }
   if(mode==="szukaj"){
@@ -587,10 +593,20 @@ async function adPost(body){
   const r = await fetch(API,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(Object.assign({haslo:adPass},body))});
   return r.json();
 }
+// zakładki panelu admina
+let adTab = LS.get("vm_adtab","map");
+function adShowTab(t){
+  adTab=t; LS.set("vm_adtab", t);
+  for(const b of $("adTabs").querySelectorAll("button")) b.classList.toggle("on", b.dataset.t===t);
+  for(const sec of document.querySelectorAll("[data-adtab]")) sec.hidden = sec.dataset.adtab!==t;
+  if(t==="map") say(adMap ? "Zeskanuj naszą etykietę z wieczka albo wyszukaj produkt." : "Zeskanuj kod z opakowania producenta.");
+  else if(t==="prod") say("Zeskanuj albo wpisz kod produktu, podaj nazwę i zapisz.");
+}
+$("adTabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(b) adShowTab(b.dataset.t); });
 // mapowanie kodów (tylko admin)
 let adMap = null;   // {key, waznosc} – czekający kod z opakowania
 function adMapDraw(){
-  $("adMapNow").textContent = adMap ? ("Kod z opakowania: "+adMap.key+" → teraz zeskanuj naszą etykietę z wieczka") : "— zeskanuj kod z opakowania —";
+  $("adMapNow").innerHTML = adMap ? ("Kod z opakowania: <b>"+esc(adMap.key)+"</b><br><span style=\"font-size:14px;font-weight:600;color:#555\">teraz zeskanuj naszą etykietę z wieczka</span>") : "— zeskanuj kod z opakowania —";
   $("adMapPick").hidden = !adMap; if(!adMap){ $("adMapQ").value=""; $("adMapRes").innerHTML=""; }
 }
 function adMapSave(k){
@@ -620,7 +636,7 @@ $("adMapQ").addEventListener("input",()=>{
 });
 $("adMapRes").addEventListener("click",e=>{ const li=e.target.closest("li.pick"); if(li && adMap) adMapSave(li.dataset.k); });
 $("adMapCancel").onclick=()=>{ adMap=null; adMapDraw(); say("Anulowano."); };
-$("adMapNew").onclick=()=>{ if(!adMap) return; $("adCode").value=adMap.key; adMap=null; adMapDraw(); adShowProd(); $("adPName").focus(); $("adPName").scrollIntoView({behavior:"smooth",block:"center"}); say("Wpisz nazwę nowego produktu i Zapisz.", "ok"); };
+$("adMapNew").onclick=()=>{ if(!adMap) return; const k=adMap.key; adMap=null; adMapDraw(); adShowTab("prod"); $("adCode").value=k; adShowProd(); $("adPName").focus(); say("Wpisz nazwę nowego produktu i Zapisz.", "ok"); };
 $("adLoc").onclick=()=>setMode("miejsca");
 function adVis(){ $("m-miejsca").hidden = !adPass; if(!adPass) $("rename").hidden = true; }
 
@@ -628,6 +644,7 @@ function adRender(){
   adVis();
   $("adLogin").hidden = !!adPass; $("adBody").hidden = !adPass;
   if(!adPass) return;
+  adShowTab(adTab);
   $("adPeople").innerHTML = OSOBY.length ? OSOBY.map((o,i)=>{
     const u=photoUrl(o.zdjecie), col=/^nieznan/i.test(o.imie)?"#9ca3af":COLORS[i%COLORS.length];
     const av = u ? `<img class="av" src="${esc(u)}" alt="">` : `<div class="av" style="background:${col}">${esc(initials(o.imie))}</div>`;
@@ -995,7 +1012,7 @@ $("zoomBtn").onclick = ()=>{ if(!zoomLevels.length) return; zoomIdx=(zoomIdx+1)%
 document.addEventListener("visibilitychange", ()=>{ if(document.hidden && camOn) stopCam(); });
 
 // ---------- start ----------
-drawPeople(); drawLoc(); adVis(); adMapDraw(); if(mode==="miejsca" && !adPass) setMode("ekran");
+drawPeople(); drawLoc(); adVis(); adMapDraw(); adShowTab(adTab); if(mode==="admin") adRender(); if(mode==="miejsca" && !adPass) setMode("ekran");
 rows = LS.get("vm_rows", []);
 render(); drawLog(); status(); flush(); pull();
 </script>
