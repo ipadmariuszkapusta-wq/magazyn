@@ -264,7 +264,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="config.js?v=8"></script>
 <script>
-const APP_VERSION = "1795587913";
+const APP_VERSION = "1795588084";
 // automatyczne odświeżenie, gdy pojawi się nowa wersja aplikacji
 async function checkUpdate(){ try{ const v=(await fetch("version.txt?"+Date.now(),{cache:"no-store"}).then(r=>r.text())).trim(); if(v && v!==APP_VERSION && !st.co && !batch.length) location.reload(); }catch(e){} }
 setInterval(checkUpdate, 120000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkUpdate(); });
@@ -966,9 +966,13 @@ $("kb").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault()
 $("kbGo").onclick = ()=>{ handle($("kb").value); $("kb").value=""; $("kb").focus(); };
 
 // ---------- aparat na żywo ----------
-let cam = null, camOn = false, lastCode = "", lastTime = 0;
-async function startCam(){
-  if(!window.Html5Qrcode){ say("Nie wczytał się moduł aparatu – sprawdź internet.", "err"); return; }
+let cam = null, camOn = false, camBusy = false, lastCode = "", lastTime = 0;
+async function startCam(silent){
+  if(camOn || camBusy) return; camBusy=true;
+  try{ await startCam_(silent); } finally { camBusy=false; }
+}
+async function startCam_(silent){
+  if(!window.Html5Qrcode){ if(silent) return; say("Nie wczytał się moduł aparatu – sprawdź internet.", "err"); return; }
   const F = Html5QrcodeSupportedFormats;
   cam = cam || new Html5Qrcode("reader", {
     formatsToSupport:[F.QR_CODE,F.EAN_13,F.EAN_8,F.UPC_A,F.UPC_E,F.CODE_128,F.CODE_39,F.ITF,F.DATA_MATRIX],
@@ -981,11 +985,12 @@ async function startCam(){
         if(text===lastCode && now-lastTime<1800) return;   // ten sam kod – odczekaj
         lastCode=text; lastTime=now; handle(text);
       }, ()=>{});
-    camOn = true; $("camBtn").textContent="⏹ Wyłącz aparat"; $("camBtn").classList.add("stop");
+    camOn = true; LS.set("vm_cam", true); $("camBtn").textContent="⏹ Wyłącz aparat"; $("camBtn").classList.add("stop");
     setupZoom();
     if(nextStep()==="co") say("Zeskanuj kod kreskowy towaru.");
   }catch(e){
-    say("Brak dostępu do aparatu. Zezwól na aparat w przeglądarce (ikona kłódki przy adresie).", "err");
+    if(silent) say("Kliknij 📷 Włącz aparat.");
+    else say("Brak dostępu do aparatu. Zezwól na aparat w przeglądarce (ikona kłódki przy adresie).", "err");
   }
 }
 // przybliżenie – małe etykiety czyta się dużo łatwiej z 2x
@@ -1007,12 +1012,18 @@ async function stopCam(){
   try{ await cam.stop(); }catch(e){}
   camOn=false; $("camBtn").textContent="📷 Włącz aparat"; $("camBtn").classList.remove("stop"); $("zoomBtn").hidden=true;
 }
-$("camBtn").onclick = ()=> camOn ? stopCam() : startCam();
+$("camBtn").onclick = ()=>{ if(camOn){ LS.set("vm_cam", false); stopCam(); } else startCam(); };
+// aparat włącza się sam, jeśli ostatnio był włączony (i przeglądarka ma już zgodę)
+function autoCam(){
+  if(document.hidden || camOn || !LS.get("vm_cam", false)) return;
+  let n=0; const t=setInterval(()=>{ n++; if(window.Html5Qrcode || n>20){ clearInterval(t); if(window.Html5Qrcode && !document.hidden) startCam(true); } }, 250);
+}
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) setTimeout(autoCam, 300); });
 $("zoomBtn").onclick = ()=>{ if(!zoomLevels.length) return; zoomIdx=(zoomIdx+1)%zoomLevels.length; applyZoom(); };
 document.addEventListener("visibilitychange", ()=>{ if(document.hidden && camOn) stopCam(); });
 
 // ---------- start ----------
-drawPeople(); drawLoc(); adVis(); adMapDraw(); adShowTab(adTab); if(mode==="admin") adRender(); if(mode==="miejsca" && !adPass) setMode("ekran");
+autoCam(); drawPeople(); drawLoc(); adVis(); adMapDraw(); adShowTab(adTab); if(mode==="admin") adRender(); if(mode==="miejsca" && !adPass) setMode("ekran");
 rows = LS.get("vm_rows", []);
 render(); drawLog(); status(); flush(); pull();
 </script>
