@@ -140,8 +140,8 @@
     <button class="sm cancel" id="whoCancel" hidden style="margin-top:16px">Anuluj</button>
   </div>
 
-  <div id="reader"></div>
-  <div class="row"><button class="big" id="camBtn" style="margin-top:0">📷 Włącz aparat</button><button class="sm" id="zoomBtn" hidden style="min-width:84px;font-weight:700">🔍 2x</button></div>
+  <div id="camArea"><div id="reader"></div>
+  <div class="row"><button class="big" id="camBtn" style="margin-top:0">📷 Włącz aparat</button><button class="sm" id="zoomBtn" hidden style="min-width:84px;font-weight:700">🔍 2x</button></div></div>
 
   <div class="msg" id="msg">Włącz aparat i zeskanuj kod kreskowy towaru.</div>
 
@@ -150,7 +150,7 @@
     <div class="srow"><input id="isQ" placeholder="Wpisz nazwę, np. rękawiczki" autocomplete="off"><button id="isMic" title="Powiedz">🎤</button></div>
     <ul class="res" id="isRes"></ul>
   </div>
-  <div class="row">
+  <div class="row" id="kbRow">
     <input id="kb" placeholder="…albo wpisz kod kreskowy i Enter" autocomplete="off" enterkeyhint="send">
     <button id="kbGo">OK</button>
   </div>
@@ -222,7 +222,6 @@
 
   <div id="searchPanel" hidden>
     <div class="srow"><input id="q" placeholder="Wpisz nazwę lub kod, np. igły" autocomplete="off"><button id="mic" title="Powiedz">🎤</button></div>
-    <div class="hint">Możesz też zeskanować kod z opakowania.</div>
     <ul class="res" id="res"></ul>
   </div>
 
@@ -268,7 +267,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="config.js?v=8"></script>
 <script>
-const APP_VERSION = "1795588330";
+const APP_VERSION = "1795588708";
 // automatyczne odświeżenie, gdy pojawi się nowa wersja aplikacji
 async function checkUpdate(){ try{ const v=(await fetch("version.txt?"+Date.now(),{cache:"no-store"}).then(r=>r.text())).trim(); if(v && v!==APP_VERSION && !st.co && !batch.length) location.reload(); }catch(e){} }
 setInterval(checkUpdate, 120000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkUpdate(); });
@@ -516,10 +515,13 @@ function renderTouch(){
 }
 function setMode(m){
   mode=m; LS.set("vm_mode", m);
+  const noCam = m==="szukaj";
+  $("camArea").hidden = noCam; $("kbRow").hidden = noCam;
+  if(noCam){ if(camOn) stopCam(); } else setTimeout(autoCam, 100);
   if(m==="ekran" && st.co && !st.ile) st.ile="1";
   render();
   if(m==="miejsca"){ drawLoc(); say(locPrompt()); }
-  else if(m==="szukaj"){ say("Wpisz nazwę albo zeskanuj kod – pokażę, gdzie leży."); doSearch(); }
+  else if(m==="szukaj"){ say("Wpisz nazwę albo powiedz 🎤 – pokażę, gdzie leży."); doSearch(); setTimeout(()=>$("q").focus(),100); }
   else say(st.co ? P(nextStep()) : "Zeskanuj kod kreskowy towaru, resztę wybierz na ekranie.");
 }
 $("m-ekran").onclick=()=>setMode("ekran");
@@ -1021,7 +1023,7 @@ async function stopCam(){
 $("camBtn").onclick = ()=>{ if(camOn){ LS.set("vm_cam", false); stopCam(); } else startCam(); };
 // aparat włącza się sam, jeśli ostatnio był włączony (i przeglądarka ma już zgodę)
 function autoCam(){
-  if(document.hidden || camOn || !LS.get("vm_cam", false)) return;
+  if(document.hidden || mode==="szukaj" || camOn || !LS.get("vm_cam", false)) return;
   let n=0; const t=setInterval(()=>{ n++; if(window.Html5Qrcode || n>20){ clearInterval(t); if(window.Html5Qrcode && !document.hidden) startCam(true); } }, 250);
 }
 document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) setTimeout(autoCam, 300); });
@@ -1029,7 +1031,7 @@ $("zoomBtn").onclick = ()=>{ if(!zoomLevels.length) return; zoomIdx=(zoomIdx+1)%
 document.addEventListener("visibilitychange", ()=>{ if(document.hidden && camOn) stopCam(); });
 
 // ---------- start ----------
-autoCam(); drawPeople(); drawLoc(); adVis(); adMapDraw(); adShowTab(adTab, true); if(mode==="admin") adRender(); if(mode==="miejsca" && !adPass) setMode("ekran");
+$("camArea").hidden = $("kbRow").hidden = (mode==="szukaj"); autoCam(); drawPeople(); drawLoc(); adVis(); adMapDraw(); adShowTab(adTab, true); if(mode==="admin") adRender(); if(mode==="miejsca" && !adPass) setMode("ekran");
 rows = LS.get("vm_rows", []);
 render(); drawLog(); status(); flush(); pull();
 </script>
