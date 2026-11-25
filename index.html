@@ -203,7 +203,7 @@
   </div>
 
   <div class="namebox" id="linkbox" hidden>
-    <div class="nb-t">Nowy kod z opakowania. Wyszukaj, jaki to produkt – zapamiętam ten kod dla wszystkich.</div>
+    <div class="nb-t">Nowy kod z opakowania. <b>Zeskanuj naszą etykietę z wieczka</b> albo wyszukaj produkt – zapamiętam ten kod dla wszystkich.</div>
     <div class="row"><input id="linkQ" placeholder="Wpisz nazwę, np. scotchbond" autocomplete="off"></div>
     <ul class="res" id="linkRes"></ul>
     <div class="row"><button id="linkNew" style="background:#fff;color:#b45309;border:2px solid #f59e0b">To całkiem nowy produkt – wpiszę nazwę</button> <button id="linkCancel" style="background:#fff;color:#555;border:2px solid #ddd">Anuluj</button></div>
@@ -245,7 +245,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="config.js?v=8"></script>
 <script>
-const APP_VERSION = "1795378054";
+const APP_VERSION = "1795587332";
 // automatyczne odświeżenie, gdy pojawi się nowa wersja aplikacji
 async function checkUpdate(){ try{ const v=(await fetch("version.txt?"+Date.now(),{cache:"no-store"}).then(r=>r.text())).trim(); if(v && v!==APP_VERSION && !st.co && !batch.length) location.reload(); }catch(e){} }
 setInterval(checkUpdate, 120000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkUpdate(); });
@@ -311,6 +311,11 @@ function describe(c){
 function handle(raw){
   const code = String(raw||"").trim();
   if(!code) return;
+  if(linkCb && !$("linkbox").hidden && !code.startsWith("VM:")){   // przypisywanie: zeskanuj naszą etykietę
+    const rp=resolve(code);
+    if(rp.co){ doLink(rp.co); return; }
+    say("Ten kod też jest nieznany. Zeskanuj naszą etykietę z wieczka (PRD/VM) albo wyszukaj produkt.", "err"); feedback(false); return;
+  }
   if(mode==="miejsca") return handleLoc(code);
   if(mode==="admin"){
     if(!adPass){ say("Najpierw wpisz hasło.", "err"); return; }
@@ -356,7 +361,12 @@ function handle(raw){
       render("co"); say("✓ "+(k ? describe(k) : "nowy produkt")+(p.waznosc?" · ważne do "+p.waznosc:"")+" — "+P(nextStep()), "ok"); if(k) feedback(true);
     };
     if(p.co){ take(p.co, p.j); return; }
-    if(mode==="ekran" && Object.keys(NAMES).length){ openLink(p, take); return; }
+    if(mode==="ekran" && Object.keys(NAMES).length){
+      const cur = NAMES[st.co] ? st.co : "";
+      openLink(p, take);
+      if(cur) $("linkRes").innerHTML = `<li class="pick" data-k="${esc(cur)}"><span class="go">To ten ›</span><b>${esc(NAMES[cur])}</b><span class="hint">${esc(cur)} · właśnie wybrany</span></li>`;
+      return;
+    }
     take(null, "", p.key); return;
   }
   undo.push(prev); if(undo.length>30) undo.shift();
@@ -413,7 +423,7 @@ let linkCb=null, linkKey="", linkJ="";
 function openLink(p, cb){
   linkKey=p.key; linkCb=cb; $("isBox").hidden=true; $("linkQ").value=""; $("linkRes").innerHTML=""; $("linkbox").hidden=false; $("namebox").hidden=true;
   setTimeout(()=>$("linkQ").focus(),50);
-  say("Nieznany kod "+p.key+(p.waznosc?" (ważne do "+p.waznosc+")":"")+" – wyszukaj produkt poniżej.", "err"); feedback(false);
+  say("Nieznany kod "+p.key+(p.waznosc?" (ważne do "+p.waznosc+")":"")+" – zeskanuj naszą etykietę z wieczka albo wyszukaj produkt.", "err"); feedback(false);
 }
 function closeLink(){ $("linkbox").hidden=true; linkCb=null; linkKey=""; }
 $("linkQ").addEventListener("input",()=>{
@@ -425,11 +435,15 @@ $("linkQ").addEventListener("input",()=>{
 });
 $("linkRes").addEventListener("click",e=>{
   const li=e.target.closest("li.pick"); if(!li || !linkCb) return;
-  const k=li.dataset.k, cb=linkCb;
+  doLink(li.dataset.k);
+});
+function doLink(k){
+  const cb=linkCb; if(!cb) return;
   KODY[linkKey]={p:k,j:linkJ}; LS.set("vm_kody", KODY);
   queue.push({typ:"kod", kod:linkKey, produkt:k, jednostka:linkJ, kto:st.kto||locKto||"", id:"k"+Date.now().toString(36)}); LS.set("vm_queue", queue);
   closeLink(); flush(); cb(k, linkJ);
-});
+  say("🔗 Zapamiętane: ten kod = "+NAMES[k]+". "+(mode==="miejsca" ? locPrompt() : P(nextStep())), "ok"); feedback(true);
+}
 $("linkNew").onclick=()=>{ const cb=linkCb; if(!cb) return; const key=linkKey; closeLink(); cb(null, "", key); };
 $("linkCancel").onclick=()=>{ closeLink(); st=empty(); undo=[]; render(); say("Anulowano. "+P("co")); };
 
