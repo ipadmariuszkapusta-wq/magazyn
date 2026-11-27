@@ -153,7 +153,7 @@
     <button class="sm cancel" id="permSkip" style="margin-top:12px">Pomiń</button>
   </div>
 
-  <div id="camArea"><div id="reader"></div>
+  <span id="camHome"></span><div id="camArea"><div id="reader"></div>
   <div class="row"><button class="big" id="camBtn" style="margin-top:0">📷 Włącz aparat</button><button class="sm" id="zoomBtn" hidden style="min-width:84px;font-weight:700">🔍 2x</button></div></div>
 
   <div class="msg" id="msg">Włącz aparat i zeskanuj kod kreskowy towaru.</div>
@@ -236,6 +236,7 @@
   <div id="searchPanel" hidden>
     <div class="srow"><input id="q" placeholder="Wpisz nazwę lub kod, np. igły" autocomplete="off"><button id="mic" title="Powiedz">🎤</button></div>
     <ul class="res" id="res"></ul>
+    <div id="searchCamSlot"><div class="tl" style="margin-top:14px">…albo zeskanuj kod kreskowy z opakowania produktu</div></div>
   </div>
 
   <div class="steps" id="steps">
@@ -280,7 +281,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="config.js?v=8"></script>
 <script>
-const APP_VERSION = "1795784425";
+const APP_VERSION = "1795796423";
 // automatyczne odświeżenie, gdy pojawi się nowa wersja aplikacji
 async function checkUpdate(){ try{ const v=(await fetch("version.txt?"+Date.now(),{cache:"no-store"}).then(r=>r.text())).trim(); if(v && v!==APP_VERSION && !st.co && !batch.length) location.reload(); }catch(e){} }
 setInterval(checkUpdate, 120000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkUpdate(); });
@@ -382,7 +383,7 @@ function handle(raw){
     if(code.startsWith("VM:")){ say("W wyszukiwarce skanuj kod z opakowania.", "err"); feedback(false); return; }
     const k=resolve(code).co||code;
     $("q").value=""; doSearch(k);
-    say(NAMES[k] ? (NAMES[k]+" → "+(MIEJSCA[k]||"brak przypisanego miejsca")) : "Tego kodu jeszcze nie ma – zeskanuj go w „Wydaj”, żeby przypisać do produktu.", NAMES[k]?"ok":"err"); feedback(!!NAMES[k]); return;
+    say(NAMES[k] ? (NAMES[k]+" → "+(MIEJSCA[k]||"brak przypisanego miejsca")) : "Nie znam tego kodu – wpisz nazwę produktu. (Nowe kody przypisuje administrator.)", NAMES[k]?"ok":"err"); feedback(!!NAMES[k]); return;
   }
   if(code.startsWith("VM:MIEJSCE:")){ say("To kod półki – przełącz na „📍 Miejsca”, żeby przypisywać towary.", "err"); feedback(false); return; }
   if(code.startsWith("VM:") && code!=="VM:OK" && code!=="VM:POPRAW"){ say("Tu skanujesz tylko kod z opakowania – resztę wybierz na ekranie.", "err"); feedback(false); return; }
@@ -553,7 +554,7 @@ function setMode(m){
   if(m==="ekran" && st.co && !st.ile) st.ile="1";
   render();
   if(m==="miejsca"){ drawLoc(); say(locPrompt()); }
-  else if(m==="szukaj"){ say("Wpisz nazwę albo powiedz 🎤 – pokażę, gdzie leży."); doSearch(); setTimeout(()=>$("q").focus(),100); }
+  else if(m==="szukaj"){ say("Wpisz nazwę, powiedz 🎤 albo zeskanuj kod z opakowania – pokażę, gdzie leży."); doSearch(); }
   else say(st.co ? P(nextStep()) : "Zeskanuj kod kreskowy towaru, resztę wybierz na ekranie.");
 }
 $("m-ekran").onclick=()=>setMode("ekran");
@@ -1059,7 +1060,7 @@ async function startCam_(silent){
       }, ()=>{});
     camOn = true; LS.set("vm_cam", true); $("camBtn").textContent="⏹ Wyłącz aparat"; $("camBtn").classList.add("stop");
     setupZoom();
-    if(nextStep()==="co") say("Zeskanuj kod kreskowy towaru.");
+    if(mode==="ekran" && nextStep()==="co") say("Zeskanuj kod kreskowy towaru.");
   }catch(e){
     if(silent) say("Kliknij 📷 Włącz aparat.");
     else say("Brak dostępu do aparatu. Zezwól na aparat w przeglądarce (ikona kłódki przy adresie).", "err");
@@ -1087,9 +1088,13 @@ async function stopCam(){
 $("camBtn").onclick = ()=>{ if(camOn){ LS.set("vm_cam", false); stopCam(); } else startCam(); };
 // aparat włącza się sam, jeśli ostatnio był włączony (i przeglądarka ma już zgodę)
 // aparat tylko tam, gdzie się skanuje: Wydaj, Miejsca, Admin → Kody / Produkty
-function noCam(){ return mode==="szukaj" || (mode==="admin" && (!isAdmin() || !["map","prod"].includes(adTab))); }
+function noCam(){ return (mode==="admin" && (!isAdmin() || !["map","prod"].includes(adTab))); }
 function camVis(){
-  const n=noCam(); $("camArea").hidden = n; $("kbRow").hidden = n;
+  // w Szukaj aparat jest pod wyszukiwarką, w pozostałych zakładkach na górze
+  const slot = mode==="szukaj" ? $("searchCamSlot") : null;
+  if(slot){ if($("camArea").parentNode!==slot) slot.appendChild($("camArea")); }
+  else if($("camArea").previousSibling!==$("camHome")) $("camHome").after($("camArea"));
+  const n=noCam(); $("camArea").hidden = n; $("kbRow").hidden = n || mode==="szukaj";
   if(n){ if(camOn) stopCam(); } else setTimeout(autoCam, 100);
 }
 function autoCam(){
@@ -1101,7 +1106,7 @@ $("zoomBtn").onclick = ()=>{ if(!zoomLevels.length) return; zoomIdx=(zoomIdx+1)%
 document.addEventListener("visibilitychange", ()=>{ if(document.hidden && camOn) stopCam(); });
 
 // ---------- start ----------
-drawLokal(); askPerm(); camVis(); drawPeople(); drawLoc(); adVis(); adMapDraw(); adShowTab(adTab, true); if(mode==="admin"){ adRender(); say(adPass ? "Panel administratora." : "Wpisz hasło administratora."); } else if(mode==="szukaj") say("Wpisz nazwę albo powiedz 🎤 – pokażę, gdzie leży."); if(mode==="miejsca" && !adPass) setMode("ekran");
+drawLokal(); askPerm(); camVis(); drawPeople(); drawLoc(); adVis(); adMapDraw(); adShowTab(adTab, true); if(mode==="admin"){ adRender(); say(adPass ? "Panel administratora." : "Wpisz hasło administratora."); } else if(mode==="szukaj") say("Wpisz nazwę, powiedz 🎤 albo zeskanuj kod z opakowania – pokażę, gdzie leży."); if(mode==="miejsca" && !adPass) setMode("ekran");
 rows = LS.get("vm_rows", []);
 render(); drawLog(); status(); flush(); pull();
 </script>
