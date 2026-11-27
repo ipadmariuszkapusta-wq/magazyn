@@ -22,8 +22,8 @@
   .steps{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .st{background:var(--card);border:2px solid var(--line);border-radius:12px;padding:8px 12px;min-height:64px}
   .st .l{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
-  .st .v{font-size:19px;font-weight:700;margin-top:3px;word-break:break-all}
-  .st .c{font-size:12px;color:var(--mut);margin-top:2px;word-break:break-all}
+  .st .v{font-size:19px;font-weight:700;margin-top:3px;overflow-wrap:anywhere;hyphens:auto}
+  .st .c{font-size:12px;color:var(--mut);margin-top:2px;overflow-wrap:anywhere}
   .st .l a{float:right;text-transform:none;letter-spacing:0;color:var(--acc);font-size:12px}
   .namebox{margin-top:10px;padding:12px;border:2px solid #f59e0b;background:#fffbeb;border-radius:12px}
   .nb-t{font-weight:600;font-size:14px}
@@ -280,7 +280,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="config.js?v=8"></script>
 <script>
-const APP_VERSION = "1795593631";
+const APP_VERSION = "1795784425";
 // automatyczne odświeżenie, gdy pojawi się nowa wersja aplikacji
 async function checkUpdate(){ try{ const v=(await fetch("version.txt?"+Date.now(),{cache:"no-store"}).then(r=>r.text())).trim(); if(v && v!==APP_VERSION && !st.co && !batch.length) location.reload(); }catch(e){} }
 setInterval(checkUpdate, 120000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkUpdate(); });
