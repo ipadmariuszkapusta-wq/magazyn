@@ -163,7 +163,7 @@
     <div class="srow"><input id="isQ" placeholder="Wpisz nazwę, np. rękawiczki" autocomplete="off"><button id="isMic" title="Powiedz">🎤</button></div>
     <ul class="res" id="isRes"></ul>
   </div>
-  <div class="row" id="kbRow">
+  <span id="kbHome"></span><div class="row" id="kbRow">
     <input id="kb" placeholder="…albo wpisz kod kreskowy i Enter" autocomplete="off" enterkeyhint="send">
     <button id="kbGo">OK</button>
   </div>
@@ -186,6 +186,7 @@
     </div>
     <div id="adBody" hidden>
       <div class="adtabs" id="adTabs"><button data-t="map">🔗 Kody</button><button data-t="loc">📍 Półki</button><button data-t="os">👤 Osoby</button><button data-t="prod">📦 Produkty</button><button data-t="wyd">🧾 Wydania</button></div>
+      <div id="adCamSlot"></div>
       <div class="adsec" data-adtab="map">
         <h3>🔗 Mapowanie kodów z opakowań</h3>
         <div class="hint">Zeskanuj kod kreskowy z opakowania producenta, potem naszą etykietę z wieczka (albo wyszukaj produkt). Od tej chwili kod z opakowania działa u wszystkich.</div>
@@ -281,7 +282,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="config.js?v=8"></script>
 <script>
-const APP_VERSION = "1795796423";
+const APP_VERSION = "1795796583";
 // automatyczne odświeżenie, gdy pojawi się nowa wersja aplikacji
 async function checkUpdate(){ try{ const v=(await fetch("version.txt?"+Date.now(),{cache:"no-store"}).then(r=>r.text())).trim(); if(v && v!==APP_VERSION && !st.co && !batch.length) location.reload(); }catch(e){} }
 setInterval(checkUpdate, 120000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkUpdate(); });
@@ -1091,9 +1092,12 @@ $("camBtn").onclick = ()=>{ if(camOn){ LS.set("vm_cam", false); stopCam(); } els
 function noCam(){ return (mode==="admin" && (!isAdmin() || !["map","prod"].includes(adTab))); }
 function camVis(){
   // w Szukaj aparat jest pod wyszukiwarką, w pozostałych zakładkach na górze
-  const slot = mode==="szukaj" ? $("searchCamSlot") : null;
+  // w panelu admina: zakładki na górze, aparat pod nimi
+  const slot = mode==="szukaj" ? $("searchCamSlot") : (mode==="admin" ? $("adCamSlot") : null);
   if(slot){ if($("camArea").parentNode!==slot) slot.appendChild($("camArea")); }
   else if($("camArea").previousSibling!==$("camHome")) $("camHome").after($("camArea"));
+  if(mode==="admin"){ if($("kbRow").parentNode!==$("adCamSlot")) $("adCamSlot").appendChild($("kbRow")); }
+  else if($("kbRow").previousSibling!==$("kbHome")) $("kbHome").after($("kbRow"));
   const n=noCam(); $("camArea").hidden = n; $("kbRow").hidden = n || mode==="szukaj";
   if(n){ if(camOn) stopCam(); } else setTimeout(autoCam, 100);
 }
