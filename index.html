@@ -98,6 +98,11 @@
   #zamList .q b{min-width:26px;text-align:center}
   #zamList .u{border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 8px;font-size:13px;font-weight:700}
   #zamUwagi{width:100%;margin-top:10px;padding:10px 12px;font-size:15px;border:1px solid var(--line);border-radius:10px;font-family:inherit}
+  #zamDone{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px}
+  #zamDone[hidden]{display:none!important}
+  #zamDone .box{background:#fff;border-radius:18px;padding:22px 18px;text-align:center;width:100%;max-width:380px}
+  #zamDone h2{margin:6px 0 4px;font-size:24px}
+  #zamList img.th{width:52px;height:52px;object-fit:cover;border-radius:8px;flex:none}
   .adlist{list-style:none;padding:0;margin:0}
   .adlist li{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
   .adlist li .grow{flex:1;min-width:0}
@@ -258,11 +263,22 @@
     <div class="tl">2. Co zamówić</div>
     <div class="srow"><input id="zamQ" placeholder="Wpisz albo powiedz 🎤, np. rękawiczki M" autocomplete="off"><button id="zamMic" title="Powiedz">🎤</button></div>
     <ul class="res" id="zamRes"></ul>
+    <label class="sm filebtn" id="zamFoto" style="display:block;text-align:center;margin-top:8px">📷 Nie wiesz, jak się nazywa? Zrób / wybierz zdjęcie<input type="file" id="zamFile" accept="image/*" hidden></label>
     <div class="tl">3. Zamówienie <span id="zamCnt"></span></div>
     <ul class="adlist" id="zamList"><li class="hint">Nic jeszcze nie dodano.</li></ul>
     <textarea id="zamUwagi" rows="2" placeholder="Uwagi (opcjonalnie), np. pilne na wtorek"></textarea>
     <button class="big ok" id="zamSend">📨 Wyślij zamówienie</button>
     <button class="sm cancel" id="zamClear" style="margin-top:8px">Wyczyść</button>
+  </div>
+
+  <div id="zamDone" hidden>
+    <div class="box">
+      <div style="font-size:54px">✅</div>
+      <h2>Zamówienie wysłane</h2>
+      <div class="hint" id="zamDoneInfo"></div>
+      <button class="big" id="zamWa" style="background:#25d366;color:#fff;border:0;margin-top:16px">Wyślij też na WhatsApp</button>
+      <button class="sm" id="zamDoneOk" style="margin-top:10px">OK</button>
+    </div>
   </div>
 
   <div id="searchPanel" hidden>
@@ -313,7 +329,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="config.js?v=8"></script>
 <script>
-const APP_VERSION = "1795861994";
+const APP_VERSION = "1795863670";
 // automatyczne odświeżenie, gdy pojawi się nowa wersja aplikacji
 async function checkUpdate(){ try{ const v=(await fetch("version.txt?"+Date.now(),{cache:"no-store"}).then(r=>r.text())).trim(); if(v && v!==APP_VERSION && !st.co && !batch.length) location.reload(); }catch(e){} }
 setInterval(checkUpdate, 120000); document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkUpdate(); });
@@ -856,7 +872,7 @@ function zamDraw(){
   $("zamLek").innerHTML = LEKARZE.length ? LEKARZE.map(l=>`<button data-l="${esc(l)}" class="${l===ZAM.lekarz?"on":""}">${esc(l)}</button>`).join("") : '<span class="hint">Brak lekarzy – administrator dodaje ich w Admin → Lekarze.</span>';
   if(document.activeElement!==$("zamUwagi")) $("zamUwagi").value = ZAM.uwagi||"";
   $("zamCnt").textContent = ZAM.items.length ? "("+ZAM.items.length+")" : "";
-  $("zamList").innerHTML = ZAM.items.length ? ZAM.items.map((it,i)=>`<li><span class="grow"><b>${esc(it.nazwa)}</b>${it.kod?`<br><span class="hint">${esc(it.kod)}</span>`:'<br><span class="hint">opis tekstem</span>'}</span>
+  $("zamList").innerHTML = ZAM.items.length ? ZAM.items.map((it,i)=>`<li>${it.foto?`<img class="th" src="${it.foto}" alt="">`:""}<span class="grow">${it.foto?`<input class="fn" data-n="${i}" value="${esc(it.nazwa==="(zdjęcie)"?"":it.nazwa)}" placeholder="opis (opcjonalnie)" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:14px">`:`<b>${esc(it.nazwa)}</b>`}${it.kod?`<br><span class="hint">${esc(it.kod)}</span>`:(it.foto?'':'<br><span class="hint">opis tekstem</span>')}</span>
     <span class="q"><button data-m="${i}">−</button><b>${it.ile}</b><button data-p="${i}">+</button></span>
     <button class="u" data-u="${i}">${it.jedn==="sztuki"?"szt.":"op."}</button><button class="x" data-d="${i}" title="Usuń">✕</button></li>`).join("") : '<li class="hint">Nic jeszcze nie dodano.</li>';
 }
@@ -886,6 +902,34 @@ $("zamList").addEventListener("click", e=>{
   else if(d.d!==undefined) ZAM.items.splice(+d.d,1);
   zamSave(); zamDraw();
 });
+$("zamList").addEventListener("input", e=>{ const f=e.target.closest("input.fn"); if(!f) return; ZAM.items[+f.dataset.n].nazwa = f.value.trim() || "(zdjęcie)"; zamSave(); });
+$("zamFile").addEventListener("change", async e=>{
+  const f=e.target.files[0]; e.target.value=""; if(!f) return;
+  try{
+    const img=await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=URL.createObjectURL(f); });
+    const k=Math.min(1, 900/Math.max(img.width,img.height)), c=document.createElement("canvas");
+    c.width=Math.round(img.width*k); c.height=Math.round(img.height*k); c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+    const foto=c.toDataURL("image/jpeg",0.7);
+    ZAM.items.push({kod:"", nazwa:"(zdjęcie)", ile:1, jedn:"opakowanie", foto}); zamSave(); zamDraw(); buzz(true);
+    say("Dodano zdjęcie. Możesz dopisać krótki opis obok.", "ok");
+  }catch(err){ say("Nie udało się wczytać zdjęcia.", "err"); }
+});
+let zamLast=null;
+function zamText(z){
+  return "🛒 Zamówienie – "+z.lekarz+"\nZamawia: "+(z.kto||"—")+" · lokal "+z.lokal+"\n"+z.pozycje.map((p,i)=>(i+1)+". "+p.nazwa+(p.foto?" [zdjęcie]":"")+" – "+p.ile+" "+(p.jedn==="sztuki"?"szt.":"op.")).join("\n")+(z.uwagi?"\nUwagi: "+z.uwagi:"");
+}
+$("zamWa").onclick=async ()=>{
+  if(!zamLast) return;
+  const text=zamText(zamLast);
+  const files=[];
+  try{ for(const [i,p] of zamLast.pozycje.entries()) if(p.foto){ const b=await (await fetch(p.foto)).blob(); files.push(new File([b],"zamowienie-"+(i+1)+".jpg",{type:"image/jpeg"})); } }catch(e){}
+  try{
+    if(files.length && navigator.canShare && navigator.canShare({files})){ await navigator.share({files, text}); return; }
+    if(navigator.share){ await navigator.share({text}); return; }
+  }catch(e){ if(e && e.name==="AbortError") return; }
+  location.href="https://wa.me/?text="+encodeURIComponent(text);
+};
+$("zamDoneOk").onclick=()=>{ $("zamDone").hidden=true; };
 $("zamUwagi").addEventListener("input", ()=>{ ZAM.uwagi=$("zamUwagi").value; zamSave(); });
 $("zamClear").onclick=()=>{ if(ZAM.items.length && !confirmClear()) return; ZAM={lekarz:"", items:[], uwagi:""}; zamSave(); zamDraw(); say("Wyczyszczono zamówienie."); };
 function confirmClear(){ const b=$("zamClear"); if(b.dataset.sure){ delete b.dataset.sure; b.textContent="Wyczyść"; return true; } b.dataset.sure="1"; b.textContent="Na pewno? Kliknij jeszcze raz"; setTimeout(()=>{ delete b.dataset.sure; b.textContent="Wyczyść"; }, 4000); return false; }
@@ -894,8 +938,10 @@ $("zamSend").onclick=()=>{
   if(!ZAM.items.length){ say("Dodaj co najmniej jeden produkt.", "err"); feedback(false); return; }
   const z={typ:"zamowienie", id:"z"+Date.now().toString(36), t:Date.now(), lokal:LOKAL, lekarz:ZAM.lekarz, kto:me()||"", uwagi:ZAM.uwagi||"", pozycje:ZAM.items};
   queue.push(z); LS.set("vm_queue", queue); flush();
-  const n=ZAM.items.length; ZAM={lekarz:"", items:[], uwagi:""}; zamSave(); zamDraw();
-  say("📨 Zamówienie wysłane ("+n+" poz.) – Mariusz dostanie maila.", "ok"); feedback(true);
+  const n=ZAM.items.length; zamLast=z; ZAM={lekarz:"", items:[], uwagi:""}; zamSave(); zamDraw();
+  say("📨 Zamówienie wysłane ("+n+" poz.).", "ok"); feedback(true);
+  $("zamDoneInfo").textContent = z.lekarz+" · "+n+" poz. – Mariusz dostanie maila."+(navigator.onLine===false?" (Brak internetu – wyśle się samo, gdy wróci zasięg.)":"");
+  $("zamDone").hidden=false;
 };
 (function(){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
